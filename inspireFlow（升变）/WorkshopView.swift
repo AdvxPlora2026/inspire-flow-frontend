@@ -5,7 +5,7 @@ struct WorkshopView: View {
     @EnvironmentObject private var session: AppSession
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var workshop: WorkshopPublicDTO?
+    @State private var workshop: WorkshopDraftPublicDTO?
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var showEditSheet = false
@@ -121,26 +121,15 @@ struct WorkshopView: View {
         .disabled(isPublishing)
     }
 
-    private func workshopContent(_ w: WorkshopPublicDTO) -> some View {
+    private func workshopContent(_ w: WorkshopDraftPublicDTO) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                // Header section
                 headerSection(w)
-                // Status badge
                 statusSection(w)
-                // Bio section
-                if let bio = w.bio, !bio.isEmpty {
-                    bioSection(bio)
-                }
-                // Content focus
-                if let focus = w.contentFocus, !focus.isEmpty {
-                    contentFocusSection(focus)
-                }
-                // Social accounts
+                if let bio = w.bio, !bio.isEmpty { bioSection(bio) }
+                if !w.contentFocus.isEmpty { contentFocusSection(w.contentFocus) }
                 socialAccountsSection(w.socialAccounts)
-                // Contact methods
                 contactsSection(w.contacts)
-                // Published projects
                 projectsSection(w.projects)
             }
             .padding(.horizontal, ShengbianMetrics.pageMargin)
@@ -148,7 +137,7 @@ struct WorkshopView: View {
         }
     }
 
-    private func headerSection(_ w: WorkshopPublicDTO) -> some View {
+    private func headerSection(_ w: WorkshopDraftPublicDTO) -> some View {
         HStack(spacing: 16) {
             // Avatar placeholder
             ZStack {
@@ -182,7 +171,7 @@ struct WorkshopView: View {
         }
     }
 
-    private func statusSection(_ w: WorkshopPublicDTO) -> some View {
+    private func statusSection(_ w: WorkshopDraftPublicDTO) -> some View {
         HStack(spacing: 8) {
             Image(systemName: w.publishedAt != nil ? "globe.asia.australia.fill" : "lock.fill")
                 .foregroundStyle(w.publishedAt != nil ? ShengbianColors.success : ShengbianColors.secondaryText)
@@ -378,11 +367,9 @@ struct WorkshopView: View {
                 Text(project.title)
                     .font(ShengbianTypography.headline)
                     .foregroundStyle(ShengbianColors.primaryText)
-                if let type = project.type {
-                    Text(type)
-                        .font(ShengbianTypography.caption)
-                        .foregroundStyle(ShengbianColors.secondaryText)
-                }
+                Text(project.type)
+                    .font(ShengbianTypography.caption)
+                    .foregroundStyle(ShengbianColors.secondaryText)
             }
             Spacer()
         }
@@ -445,8 +432,8 @@ private struct WorkshopEditSheet: View {
     @EnvironmentObject private var session: AppSession
     @Environment(\.dismiss) private var dismiss
 
-    let current: WorkshopPublicDTO?
-    let onSave: (WorkshopPublicDTO) -> Void
+    let current: WorkshopDraftPublicDTO?
+    let onSave: (WorkshopDraftPublicDTO) -> Void
 
     @State private var nickname = ""
     @State private var title = ""
@@ -456,14 +443,14 @@ private struct WorkshopEditSheet: View {
     @State private var collaborationPreferences = ""
     @State private var isLoading = false
 
-    init(workshop: WorkshopPublicDTO?, onSave: @escaping (WorkshopPublicDTO) -> Void) {
+    init(workshop: WorkshopDraftPublicDTO?, onSave: @escaping (WorkshopDraftPublicDTO) -> Void) {
         self.current = workshop
         self.onSave = onSave
         _nickname = State(initialValue: workshop?.nickname ?? "")
         _title = State(initialValue: workshop?.title ?? "")
         _bio = State(initialValue: workshop?.bio ?? "")
         _creatorIdentity = State(initialValue: workshop?.creatorIdentity ?? "")
-        _contentFocus = State(initialValue: workshop?.contentFocus?.joined(separator: "，") ?? "")
+        _contentFocus = State(initialValue: workshop?.contentFocus.joined(separator: "，") ?? "")
         _collaborationPreferences = State(initialValue: workshop?.collaborationPreferences ?? "")
     }
 

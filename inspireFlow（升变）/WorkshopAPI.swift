@@ -2,9 +2,58 @@ import Foundation
 
 // MARK: - Workshop Public
 
+/// Draft shape from `GET/PATCH /users/me/workshop` and `POST withdraw`.
+struct WorkshopDraftPublicDTO: Codable {
+    let userID: UUID
+    let status: String
+    let nickname: String
+    let avatarURL: String?
+    let title: String?
+    let bio: String?
+    let creatorIdentity: String?
+    let contentFocus: [String]
+    let collaborationPreferences: String?
+    let nicknameVisibility: WorkshopVisibility
+    let avatarVisibility: WorkshopVisibility
+    let titleVisibility: WorkshopVisibility
+    let bioVisibility: WorkshopVisibility
+    let creatorIdentityVisibility: WorkshopVisibility
+    let contentFocusVisibility: WorkshopVisibility
+    let collaborationPreferencesVisibility: WorkshopVisibility
+    let socialAccounts: [WorkshopSocialAccountPublicDTO]
+    let contacts: [WorkshopContactPublicDTO]
+    let projects: [WorkshopProjectCardPublicDTO]
+    let publishedAt: Date?
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case userID = "user_id"
+        case status, nickname
+        case avatarURL = "avatar_url"
+        case title, bio
+        case creatorIdentity = "creator_identity"
+        case contentFocus = "content_focus"
+        case collaborationPreferences = "collaboration_preferences"
+        case nicknameVisibility = "nickname_visibility"
+        case avatarVisibility = "avatar_visibility"
+        case titleVisibility = "title_visibility"
+        case bioVisibility = "bio_visibility"
+        case creatorIdentityVisibility = "creator_identity_visibility"
+        case contentFocusVisibility = "content_focus_visibility"
+        case collaborationPreferencesVisibility = "collaboration_preferences_visibility"
+        case socialAccounts = "social_accounts"
+        case contacts, projects
+        case publishedAt = "published_at"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+/// Published shape from `POST publish`, `GET preview`, `GET workshops/{id}`.
 struct WorkshopPublicDTO: Codable {
     let creatorID: UUID
-    let nickname: String
+    let nickname: String?
     let avatarURL: String?
     let title: String?
     let bio: String?
@@ -147,14 +196,19 @@ enum ContactVisibility: String, Codable {
 struct WorkshopProjectCardPublicDTO: Codable, Identifiable {
     let projectID: UUID?
     let title: String
-    let type: String?
-    let summary: String?
-    let coverURL: String?
+    let type: String
+    let audience: String
+    let summary: String
+    let iconURL: String?
+    let visibility: WorkshopVisibility?
+    let sortOrder: Int
 
     enum CodingKeys: String, CodingKey {
         case projectID = "project_id"
-        case title, type, summary
-        case coverURL = "cover_url"
+        case title, type, audience, summary
+        case iconURL = "icon_url"
+        case visibility
+        case sortOrder = "sort_order"
     }
 
     var id: String { projectID?.uuidString ?? title }
@@ -165,12 +219,16 @@ struct WorkshopProjectCardPublicDTO: Codable, Identifiable {
 struct WorkshopBrandAuthorizationPublicDTO: Codable {
     let brandID: UUID
     let brandName: String
-    let authorizedAt: Date
+    let active: Bool
+    let grantedAt: Date
+    let revokedAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case brandID = "brand_id"
         case brandName = "brand_name"
-        case authorizedAt = "authorized_at"
+        case active
+        case grantedAt = "granted_at"
+        case revokedAt = "revoked_at"
     }
 }
 
@@ -264,8 +322,16 @@ private struct WorkshopContactUpdateRequest: Encodable {
 private struct WorkshopSocialAccountCreateRequest: Encodable {
     let platform: SocialPlatform
     let handle: String?
+    let profileURL: String?
+    let visibility: WorkshopVisibility = .workshopPublic
+    let sortOrder: Int = 0
 
-    enum CodingKeys: String, CodingKey { case platform, handle }
+    enum CodingKeys: String, CodingKey {
+        case platform, handle
+        case profileURL = "profile_url"
+        case visibility
+        case sortOrder = "sort_order"
+    }
 }
 
 private struct WorkshopSocialAccountUpdateRequest: Encodable {
@@ -275,10 +341,12 @@ private struct WorkshopSocialAccountUpdateRequest: Encodable {
 }
 
 private struct WorkshopProjectSelectionUpdateRequest: Encodable {
-    let projectID: UUID
+    let visibility: WorkshopVisibility = .workshopPublic
+    let sortOrder: Int = 0
 
     enum CodingKeys: String, CodingKey {
-        case projectID = "project_id"
+        case visibility
+        case sortOrder = "sort_order"
     }
 }
 
@@ -288,7 +356,7 @@ enum WorkshopAPI {
     // MARK: Workshop
 
     /// Read my workshop (draft or published).
-    static func myWorkshop(accessToken: String) async throws -> WorkshopPublicDTO {
+    static func myWorkshop(accessToken: String) async throws -> WorkshopDraftPublicDTO {
         try await APIClient.shared.send("users/me/workshop", accessToken: accessToken)
     }
 
@@ -309,7 +377,7 @@ enum WorkshopAPI {
         creatorIdentityVisibility: WorkshopVisibility? = nil,
         contentFocusVisibility: WorkshopVisibility? = nil,
         collaborationPreferencesVisibility: WorkshopVisibility? = nil
-    ) async throws -> WorkshopPublicDTO {
+    ) async throws -> WorkshopDraftPublicDTO {
         let body = try BackendJSON.encoder.encode(
             WorkshopUpdateRequest(
                 nickname: nickname, avatarURL: avatarURL, title: title, bio: bio,
@@ -330,17 +398,17 @@ enum WorkshopAPI {
         try await APIClient.shared.send("users/me/workshop/preview", accessToken: accessToken)
     }
 
-    /// Publish my workshop.
-    static func publish(accessToken: String) async throws {
-        let _: EmptyResponse = try await APIClient.shared.send(
+    /// Publish my workshop. Returns the published view.
+    static func publish(accessToken: String) async throws -> WorkshopPublicDTO {
+        return try await APIClient.shared.send(
             "users/me/workshop/publish", method: "POST", accessToken: accessToken,
             idempotencyKey: UUID().uuidString
         )
     }
 
-    /// Withdraw my workshop from public view.
-    static func withdraw(accessToken: String) async throws {
-        let _: EmptyResponse = try await APIClient.shared.send(
+    /// Withdraw my workshop from public view. Returns the draft.
+    static func withdraw(accessToken: String) async throws -> WorkshopDraftPublicDTO {
+        return try await APIClient.shared.send(
             "users/me/workshop/withdraw", method: "POST", accessToken: accessToken,
             idempotencyKey: UUID().uuidString
         )
@@ -353,8 +421,8 @@ enum WorkshopAPI {
 
     // MARK: Social Accounts
 
-    static func createSocialAccount(platform: SocialPlatform, handle: String?, accessToken: String) async throws -> WorkshopSocialAccountPublicDTO {
-        let body = try BackendJSON.encoder.encode(WorkshopSocialAccountCreateRequest(platform: platform, handle: handle))
+    static func createSocialAccount(platform: SocialPlatform, handle: String?, profileURL: String? = nil, accessToken: String) async throws -> WorkshopSocialAccountPublicDTO {
+        let body = try BackendJSON.encoder.encode(WorkshopSocialAccountCreateRequest(platform: platform, handle: handle, profileURL: profileURL))
         return try await APIClient.shared.send(
             "users/me/workshop/social-accounts", method: "POST", body: body, accessToken: accessToken,
             idempotencyKey: UUID().uuidString
@@ -405,7 +473,15 @@ enum WorkshopAPI {
 
     /// Add a project to workshop display.
     static func addProject(_ projectID: UUID, accessToken: String) async throws {
-        let body = try BackendJSON.encoder.encode(WorkshopProjectSelectionUpdateRequest(projectID: projectID))
+        struct Body: Encodable {
+            let visibility: WorkshopVisibility = .workshopPublic
+            let sortOrder: Int = 0
+            enum CodingKeys: String, CodingKey {
+                case visibility  // "visibility" maps to same case directly.
+                case sortOrder = "sort_order"
+            }
+        }
+        let body = try BackendJSON.encoder.encode(Body())
         let _: EmptyResponse = try await APIClient.shared.send(
             "users/me/workshop/projects/\(projectID.uuidString)", method: "PUT", body: body, accessToken: accessToken
         )

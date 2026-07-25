@@ -231,7 +231,7 @@ struct BrandDiscoveryView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(creator.nickname)
+                    Text(creator.nickname ?? "未命名")
                         .font(ShengbianTypography.headline)
                         .foregroundStyle(ShengbianColors.primaryText)
                     if let title = creator.title {

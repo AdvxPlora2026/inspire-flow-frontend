@@ -27,7 +27,6 @@ struct inspireFlowApp: App {
             .environmentObject(headsetManager)
             .environmentObject(speechOutput)
             .task {
-                headsetManager.configure()
                 if ringManager.hasSavedRing {
                     ringManager.reconnectSaved()
                 }
