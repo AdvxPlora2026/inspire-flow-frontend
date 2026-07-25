@@ -428,7 +428,7 @@ struct ProjectPawnWorkspaceView: View {
                 content: "项目《\(project.name)》：\(prompt)",
                 accessToken: accessToken
             )
-        } catch APIClientError.server(let status, _, _) where status == 404 {
+        } catch APIClientError.server(let status, _, _, _) where status == 404 {
             appStore.removeRemoteConversationID(for: project.id)
             let replacement = try await ConversationAPI.create(title: project.name, accessToken: accessToken)
             appStore.setRemoteConversationID(replacement.id, for: project.id)
@@ -594,7 +594,7 @@ private struct ProjectPawnMessageBubble: View {
             .font(ShengbianTypography.caption)
             .foregroundStyle(message.role == .pawn ? ShengbianColors.secondaryText : ShengbianColors.inverseText.opacity(0.64))
 
-            Text(message.text.isEmpty ? "正在整理…" : message.text)
+            Text(message.text.isEmpty ? "正在整理…" : (try? AttributedString(markdown: message.text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(message.text))
                 .font(ShengbianTypography.body)
                 .foregroundStyle(message.role == .pawn ? ShengbianColors.primaryText : ShengbianColors.inverseText)
                 .fixedSize(horizontal: false, vertical: true)

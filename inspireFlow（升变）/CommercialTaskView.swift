@@ -1,5 +1,7 @@
 import SwiftUI
 import CryptoKit
+import UIKit
+import UniformTypeIdentifiers
 
 struct CommercialTaskView: View {
     @EnvironmentObject private var appStore: AppStore
@@ -26,6 +28,8 @@ struct CommercialTaskView: View {
     // Submit-work form state
     @State private var showSubmitForm = false
     @State private var deliveryURL = ""
+    @State private var selectedFileURL: URL? = nil
+    @State private var showDocumentPicker = false
     @State private var isSubmitting = false
     @State private var submitErrorMessage: String?
 
@@ -256,6 +260,32 @@ struct CommercialTaskView: View {
                 .background(ShengbianColors.glassTint, in: RoundedRectangle(cornerRadius: 8))
 
             HStack(spacing: 10) {
+                Button {
+                    // Present document picker
+                    showDocumentPicker = true
+                } label: {
+                    Label("选择文件", systemImage: "doc")
+                        .font(ShengbianTypography.caption)
+                }
+                .sheet(isPresented: $showDocumentPicker) {
+                    DocumentPicker { url in
+                        selectedFileURL = url
+                        if let url = url {
+                            deliveryURL = url.absoluteString
+                        }
+                        showDocumentPicker = false
+                    }
+                }
+
+                if let file = selectedFileURL {
+                    Text(file.lastPathComponent)
+                        .font(ShengbianTypography.caption)
+                        .foregroundStyle(ShengbianColors.secondaryText)
+                        .lineLimit(1)
+                }
+            }
+
+            HStack(spacing: 10) {
                 Button("取消") {
                     withAnimation(.easeOut(duration: 0.2)) { showSubmitForm = false }
                 }
@@ -294,7 +324,15 @@ struct CommercialTaskView: View {
         do {
             // Generate artifact ID and SHA-256 from the delivery URL
             let artifactID = UUID()
-            let sha256 = url.sha256()
+            let sha256: String
+            if let fileURL = selectedFileURL {
+                // Prefer file content hash when user selected a file
+                let data = try Data(contentsOf: fileURL)
+                sha256 = data.sha256()
+            } else {
+                // Fallback: hash the URL string (weaker proof)
+                sha256 = url.sha256()
+            }
             _ = try await CommercialTaskAPI.submit(
                 taskID: task.id,
                 artifactID: artifactID,
@@ -305,9 +343,10 @@ struct CommercialTaskView: View {
             Haptics.success()
             showSubmitForm = false
             deliveryURL = ""
+            selectedFileURL = nil
             await loadTask()
         } catch {
-            submitErrorMessage = error.localizedDescription
+            submitErrorMessage = friendlyError(error)
             Haptics.error()
         }
         isSubmitting = false
@@ -378,6 +417,9 @@ struct CommercialTaskView: View {
             Text("链上交易记录")
                 .font(ShengbianTypography.headline)
                 .foregroundStyle(ShengbianColors.primaryText)
+            if let failed = txs.first(where: { $0.status == .failed }) {
+                transactionFailureNotice(failed)
+            }
             if txs.isEmpty {
                 Text("暂无链上记录")
                     .font(ShengbianTypography.body)
@@ -390,25 +432,105 @@ struct CommercialTaskView: View {
         }
     }
 
-    private func chainTransactionRow(_ tx: ChainTransactionPublicDTO) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Image(systemName: tx.status == .confirmed ? "checkmark.shield.fill" : "clock.badge.questionmark")
-                    .foregroundStyle(tx.status == .confirmed ? ShengbianColors.success : ShengbianColors.warning)
-                Text(tx.action.rawValue)
+    private func transactionFailureNotice(_ tx: ChainTransactionPublicDTO) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("链上动作尚未确认", systemImage: "exclamationmark.triangle.fill")
+                .font(ShengbianTypography.headline)
+                .foregroundStyle(ShengbianColors.warning)
+            Text("任务状态与单笔交易状态分别计算。当前任务仍显示为任务流程状态，不能据此判断资金已完成上链。")
+                .font(ShengbianTypography.caption)
+                .foregroundStyle(ShengbianColors.secondaryText)
+            if let reason = tx.failureReason, !reason.isEmpty {
+                Text(reason)
                     .font(ShengbianTypography.caption)
-                    .foregroundStyle(ShengbianColors.primaryText)
-                Spacer()
-                Text(tx.status.rawValue)
+                    .foregroundStyle(ShengbianColors.warning)
+            }
+            if tx.retryable == true {
+                Text("读取 proof 时后端会自动重试可重试的交易，请稍后刷新。")
+                    .font(ShengbianTypography.caption)
+                    .foregroundStyle(ShengbianColors.secondaryText)
+            } else if tx.retryable == false {
+                Text("该交易不可自动重试，请根据交易哈希和浏览器记录排查。")
                     .font(ShengbianTypography.caption)
                     .foregroundStyle(ShengbianColors.secondaryText)
             }
+            Button {
+                Task { await loadTask() }
+            } label: {
+                Label("刷新链上确认（触发自动重试）", systemImage: "arrow.clockwise")
+                    .font(ShengbianTypography.caption)
+                    .foregroundStyle(ShengbianColors.primaryAction)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ShengbianColors.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func chainTransactionRow(_ tx: ChainTransactionPublicDTO) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Image(systemName: transactionIcon(for: tx.status))
+                    .foregroundStyle(transactionColor(for: tx.status))
+                Text(transactionTitle(for: tx.action))
+                    .font(ShengbianTypography.caption)
+                    .foregroundStyle(ShengbianColors.primaryText)
+                Spacer()
+                Text(transactionStatusTitle(tx.status))
+                    .font(ShengbianTypography.caption)
+                    .foregroundStyle(transactionColor(for: tx.status))
+            }
+
             if let hash = tx.transactionHash {
                 Text("Tx: \(String(hash.prefix(20)))...")
                     .font(ShengbianTypography.technical)
                     .foregroundStyle(ShengbianColors.listening)
                     .lineLimit(1)
             }
+
+            if let amount = tx.amount, let denom = tx.denom {
+                Text("金额：\(amount) \(denom)")
+                    .font(ShengbianTypography.technical)
+                    .foregroundStyle(ShengbianColors.secondaryText)
+            }
+
+            HStack(spacing: 4) {
+                Text(tx.network)
+                    .font(ShengbianTypography.technical)
+                    .foregroundStyle(ShengbianColors.secondaryText)
+                if let cid = tx.chainID {
+                    Text("(\(cid))")
+                        .font(ShengbianTypography.technical)
+                        .foregroundStyle(ShengbianColors.secondaryText)
+                }
+            }
+
+            if let submitted = tx.submittedAt {
+                Text("提交：\(Self.dateFormatter.string(from: submitted))")
+                    .font(ShengbianTypography.technical)
+                    .foregroundStyle(ShengbianColors.secondaryText)
+            }
+            if let confirmed = tx.confirmedAt {
+                Text("确认：\(Self.dateFormatter.string(from: confirmed))")
+                    .font(ShengbianTypography.technical)
+                    .foregroundStyle(ShengbianColors.success)
+            }
+            if let failureReason = tx.failureReason, !failureReason.isEmpty {
+                Text(failureReason)
+                    .font(ShengbianTypography.caption)
+                    .foregroundStyle(ShengbianColors.warning)
+            }
+
+            if tx.status == .failed && tx.retryable == true {
+                Button {
+                    Task { await loadTask() }
+                } label: {
+                    Label("手动重试广播", systemImage: "arrow.clockwise")
+                        .font(ShengbianTypography.caption)
+                        .foregroundStyle(ShengbianColors.primaryAction)
+                }
+            }
+
             if let urlStr = tx.explorerURL, let validURL = URL(string: urlStr) {
                 Link("在浏览器查看", destination: validURL)
                     .font(ShengbianTypography.caption)
@@ -417,6 +539,41 @@ struct CommercialTaskView: View {
         }
         .padding(10)
         .background(ShengbianColors.glassTint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func transactionTitle(for action: ChainTransactionAction) -> String {
+        switch action {
+        case .escrowFunded: "资金托管"
+        case .submissionRecorded: "提交存证"
+        case .authorizationActivated: "授权激活"
+        case .settlementReleased: "结算释放"
+        }
+    }
+
+    private func transactionStatusTitle(_ status: ChainTransactionStatus) -> String {
+        switch status {
+        case .prepared: "待广播"
+        case .broadcast: "广播中"
+        case .confirmed: "已确认"
+        case .failed: "失败"
+        }
+    }
+
+    private func transactionIcon(for status: ChainTransactionStatus) -> String {
+        switch status {
+        case .prepared: "clock"
+        case .broadcast: "arrow.up.circle"
+        case .confirmed: "checkmark.shield.fill"
+        case .failed: "exclamationmark.triangle.fill"
+        }
+    }
+
+    private func transactionColor(for status: ChainTransactionStatus) -> Color {
+        switch status {
+        case .confirmed: ShengbianColors.success
+        case .failed: ShengbianColors.warning
+        case .prepared, .broadcast: ShengbianColors.secondaryText
+        }
     }
 
     // MARK: - Actions
@@ -493,6 +650,8 @@ struct CommercialTaskView: View {
                 TextField("金额", text: $taskAmount)
                     .keyboardType(.decimalPad)
                 TextField("币种", text: $taskDenom)
+                    .disabled(true)
+                    .foregroundStyle(ShengbianColors.secondaryText)
             }
             .font(ShengbianTypography.body)
             .foregroundStyle(ShengbianColors.primaryText)
@@ -535,6 +694,36 @@ struct CommercialTaskView: View {
         }
     }
 
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MM-dd HH:mm:ss"
+        f.locale = Locale(identifier: "zh_CN")
+        return f
+    }()
+
+    private func friendlyError(_ error: Error) -> String {
+        guard let apiError = error as? APIClientError else { return error.localizedDescription }
+        switch apiError {
+        case .server(_, let code, let message, _):
+            switch code {
+            case "injective_unavailable":
+                return "Injective 链尚未配置或不可用，请确认后端已设置 APP_INJECTIVE_PRIVATE_KEY 环境变量。"
+            case "sequence_conflict":
+                return "操作顺序冲突：该任务当前状态不允许此操作，请刷新后重试。"
+            case "commercial_task_not_found":
+                return "链上任务不存在或不属于当前用户。"
+            case "project_not_found":
+                return "关联项目不存在或不属于当前用户。"
+            default:
+                return message
+            }
+        case .unauthorized:
+            return "登录状态已失效，请重新登录。"
+        default:
+            return apiError.localizedDescription
+        }
+    }
+
     private func loadTask() async {
         guard let taskID = resolvedTaskID else {
             isLoading = false
@@ -552,19 +741,34 @@ struct CommercialTaskView: View {
             task = result.task
             proof = result
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = friendlyError(error)
         }
         isLoading = false
     }
 
     private func doCreate() async {
         guard let token = session.accessToken, !taskAmount.isEmpty else { return }
+        let amountTrimmed = taskAmount.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Basic validation: must be positive decimal with ≤18 decimal places
+        if let dotIndex = amountTrimmed.firstIndex(of: ".") {
+            let decimals = amountTrimmed[amountTrimmed.index(after: dotIndex)...]
+            if decimals.count > 18 {
+                errorMessage = "金额小数位数不能超过 18 位。"
+                Haptics.error()
+                return
+            }
+        }
+        guard let _ = Decimal(string: amountTrimmed), amountTrimmed != "0" else {
+            errorMessage = "金额必须为正数。"
+            Haptics.error()
+            return
+        }
         isCreating = true
         do {
             let newTask = try await CommercialTaskAPI.create(
                 projectID: projectID,
                 title: taskTitle.trimmingCharacters(in: .whitespacesAndNewlines),
-                budget: BudgetDTO(amount: taskAmount, denom: taskDenom),
+                budget: BudgetDTO(amount: amountTrimmed, denom: "inj"),
                 deadline: taskDeadline,
                 splits: [CommercialTaskSplitDTO(partyID: "creator", bps: 10000)],
                 accessToken: token
@@ -573,11 +777,12 @@ struct CommercialTaskView: View {
             appStore.setCommercialTaskID(for: projectID, taskID: newTask.id)
             task = newTask
             showCreateForm = false
+            taskDenom = "INJ"
             Haptics.success()
             // Now load proof with the correct task ID
             await loadTask()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = friendlyError(error)
             Haptics.error()
         }
         isCreating = false
@@ -594,7 +799,7 @@ struct CommercialTaskView: View {
             Haptics.success()
             await loadTask()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = friendlyError(error)
             Haptics.error()
         }
     }
@@ -610,11 +815,52 @@ struct CommercialTaskView: View {
             Haptics.success()
             await loadTask()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = friendlyError(error)
             Haptics.error()
         }
     }
 }
+
+// MARK: - Helpers
+
+import UniformTypeIdentifiers
+
+private struct DocumentPicker: UIViewControllerRepresentable {
+    var onPick: (URL?) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.data, UTType.item], asCopy: true)
+        picker.delegate = context.coordinator
+        picker.allowsMultipleSelection = false
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onPick: (URL?) -> Void
+        init(onPick: @escaping (URL?) -> Void) { self.onPick = onPick }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            onPick(urls.first)
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            onPick(nil)
+        }
+    }
+}
+
+private extension Data {
+    func sha256() -> String {
+        let digest = SHA256.hash(data: self)
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+
 
 private extension String {
     func sha256() -> String {

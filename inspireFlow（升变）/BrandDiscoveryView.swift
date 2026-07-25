@@ -10,6 +10,7 @@ struct BrandDiscoveryView: View {
     @State private var isLoadingBrands = true
     @State private var isLoadingCreators = false
     @State private var errorMessage: String?
+    @State private var discoveryErrorMessage: String?
     @State private var searchQuery = ""
     @State private var showNewBrandSheet = false
 
@@ -38,8 +39,32 @@ struct BrandDiscoveryView: View {
                                 }
                             }
                             .padding(.horizontal, ShengbianMetrics.pageMargin)
-                            .padding(.bottom, 40)
+
+                            if let discoveryErrorMessage {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Label("创作者暂时无法加载", systemImage: "exclamationmark.triangle.fill")
+                                        .font(ShengbianTypography.headline)
+                                        .foregroundStyle(ShengbianColors.warning)
+                                    Text(discoveryErrorMessage)
+                                        .font(ShengbianTypography.caption)
+                                        .foregroundStyle(ShengbianColors.secondaryText)
+                                    if let selectedBrand {
+                                        Button {
+                                            Task { await loadCreators(for: selectedBrand) }
+                                        } label: {
+                                            Label("重试发现", systemImage: "arrow.clockwise")
+                                                .font(ShengbianTypography.caption)
+                                                .foregroundStyle(ShengbianColors.primaryAction)
+                                        }
+                                    }
+                                }
+                                .padding(12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(ShengbianColors.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            }
+                            Spacer(minLength: 0)
                         }
+                        .padding(.bottom, 40)
                     }
                 }
                 .navigationTitle("品牌发现")
@@ -320,9 +345,15 @@ struct BrandDiscoveryView: View {
         do {
             let page = try await BrandEngagementAPI.list(accessToken: token)
             brands = page.items
-            if selectedBrand == nil, let first = brands.first {
+            if let current = selectedBrand, let refreshed = brands.first(where: { $0.id == current.id }) {
+                selectedBrand = refreshed
+                await loadCreators(for: refreshed)
+            } else if let first = brands.first {
                 selectedBrand = first
                 await loadCreators(for: first)
+            } else {
+                selectedBrand = nil
+                creators = []
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -332,7 +363,9 @@ struct BrandDiscoveryView: View {
 
     private func loadCreators(for brand: BrandPublicDTO) async {
         isLoadingCreators = true
+        discoveryErrorMessage = nil
         guard let token = session.accessToken else {
+            discoveryErrorMessage = "请在登录后使用创作者发现。"
             isLoadingCreators = false
             return
         }
@@ -344,7 +377,8 @@ struct BrandDiscoveryView: View {
             )
             creators = page.items
         } catch {
-            errorMessage = error.localizedDescription
+            creators = []
+            discoveryErrorMessage = error.localizedDescription
         }
         isLoadingCreators = false
     }

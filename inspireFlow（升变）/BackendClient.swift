@@ -80,14 +80,14 @@ struct APIErrorEnvelope: Decodable {
 enum APIClientError: Error, LocalizedError {
     case transport(Error)
     case invalidResponse
-    case server(status: Int, code: String, message: String)
+    case server(status: Int, code: String, message: String, details: [APIErrorEnvelope.ErrorDetail]?)
     case decoding(Error)
     case unauthorized
 
     /// The HTTP status code, if known.
     var statusCode: Int? {
         switch self {
-        case .server(let status, _, _): return status
+        case .server(let status, _, _, _): return status
         case .unauthorized: return 401
         default: return nil
         }
@@ -96,7 +96,7 @@ enum APIClientError: Error, LocalizedError {
     /// The backend `error.code` string, if known.
     var code: String? {
         switch self {
-        case .server(_, let code, _): return code
+        case .server(_, let code, _, _): return code
         case .unauthorized: return "invalid_session"
         default: return nil
         }
@@ -108,8 +108,11 @@ enum APIClientError: Error, LocalizedError {
             return error.localizedDescription
         case .invalidResponse:
             return "服务器返回了无法识别的响应。"
-        case .server(_, _, let message):
-            return message
+        case .server(_, let code, let message, let details):
+            if let firstDetail = details?.first?.message, !firstDetail.isEmpty {
+                return "\(message)（\(code)：\(firstDetail)）"
+            }
+            return "\(message)（\(code)）"
         case .decoding:
             return "无法解析服务器返回的数据。"
         case .unauthorized:
@@ -190,9 +193,8 @@ actor APIClient {
     }
 
     private func endpointURL(for path: String, baseURL: URL) -> URL {
-        baseURL
-            .appendingPathComponent(BackendConfig.apiPrefix)
-            .appendingPathComponent(path)
+        let base = baseURL.appendingPathComponent(BackendConfig.apiPrefix + "/", isDirectory: true)
+        return URL(string: path, relativeTo: base) ?? base.appendingPathComponent(path)
     }
 
     private func shouldUseFallback(_ response: HTTPURLResponse) -> Bool {
@@ -271,12 +273,18 @@ actor APIClient {
                 if http.statusCode == 401 {
                     throw APIClientError.unauthorized
                 }
-                throw APIClientError.server(status: http.statusCode, code: envelope.error.code, message: envelope.error.message)
+                throw APIClientError.server(
+                    status: http.statusCode,
+                    code: envelope.error.code,
+                    message: envelope.error.message,
+                    details: envelope.error.details
+                )
             }
             throw APIClientError.server(
                 status: http.statusCode,
                 code: "unknown_error",
-                message: "请求失败（状态码 \(http.statusCode)）。"
+                message: "请求失败（状态码 \(http.statusCode)）。",
+                details: nil
             )
         }
 

@@ -141,7 +141,7 @@ final class AppSession: ObservableObject {
             applyAuthenticatedSession(created, role: role)
             return true
         } catch let error as APIClientError {
-            if case .server(let status, _, _) = error, status == 404 {
+            if case .server(let status, _, _, _) = error, status == 404 {
                 authErrorMessage = "在线后端尚未启用演示账号，请部署 /api/v1/sessions/demo，或选择本地演示数据。"
             } else {
                 authErrorMessage = Self.message(for: error)
@@ -282,7 +282,7 @@ final class AppSession: ObservableObject {
 
     private static func message(for error: APIClientError) -> String {
         switch error {
-        case .server(_, let code, let message):
+        case .server(_, let code, let message, _):
             switch code {
             case "nickname_conflict": return "这个昵称已被使用，换一个试试。"
             case "invalid_credentials": return "昵称或密码不正确。"

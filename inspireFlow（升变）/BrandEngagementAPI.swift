@@ -74,12 +74,20 @@ struct BrandFollowPublicDTO: Codable {
     let brandID: UUID
     let creatorID: UUID
     let status: FollowStatus
+    let followedAt: Date
+    let unfollowedAt: Date?
+    let createdAt: Date
+    let updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
         case id
         case brandID = "brand_id"
         case creatorID = "creator_id"
         case status
+        case followedAt = "followed_at"
+        case unfollowedAt = "unfollowed_at"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
     }
 }
 
@@ -99,19 +107,23 @@ struct BrandFollowPageDTO: Codable {
 struct BrandInterestPublicDTO: Codable {
     let id: UUID
     let brandID: UUID
+    let brandName: String
     let creatorID: UUID
-    let projectID: UUID?
     let message: String?
     let status: InterestStatus
+    let createdByUserID: UUID
+    let respondedAt: Date?
     let createdAt: Date
     let updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
         case id
         case brandID = "brand_id"
+        case brandName = "brand_name"
         case creatorID = "creator_id"
-        case projectID = "project_id"
         case message, status
+        case createdByUserID = "created_by_user_id"
+        case respondedAt = "responded_at"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -130,12 +142,10 @@ struct BrandInterestPageDTO: Codable {
 
 private struct BrandInterestCreateRequest: Encodable {
     let creatorID: UUID
-    let projectID: UUID?
     let message: String?
 
     enum CodingKeys: String, CodingKey {
         case creatorID = "creator_id"
-        case projectID = "project_id"
         case message
     }
 }
@@ -160,12 +170,10 @@ struct BrandInvitationPublicDTO: Codable {
 }
 
 private struct BrandInvitationCreateRequest: Encodable {
-    let inviteeUserID: UUID
-    let role: BrandRole
+    let nickname: String
 
     enum CodingKeys: String, CodingKey {
-        case inviteeUserID = "invitee_user_id"
-        case role
+        case nickname
     }
 }
 
@@ -210,20 +218,30 @@ struct CreatorInboxPageDTO: Codable {
 
 struct CreatorInboxItemDTO: Codable {
     let id: UUID
-    let type: String
-    let brandID: UUID?
-    let brandName: String?
+    let kind: String
+    let brandID: UUID
+    let brandName: String
+    let referenceID: UUID
+    let status: String
     let message: String?
     let isRead: Bool
+    let readAt: Date?
+    let eventAt: Date
     let createdAt: Date
+    let updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, type
+        case id, kind
         case brandID = "brand_id"
         case brandName = "brand_name"
+        case referenceID = "reference_id"
+        case status
         case message
         case isRead = "is_read"
+        case readAt = "read_at"
+        case eventAt = "event_at"
         case createdAt = "created_at"
+        case updatedAt = "updated_at"
     }
 }
 
@@ -304,7 +322,7 @@ enum BrandEngagementAPI {
     // MARK: Invitations
 
     static func createInvitation(_ brandID: UUID, inviteeUserID: UUID, role: BrandRole, accessToken: String) async throws -> BrandInvitationPublicDTO {
-        let body = try BackendJSON.encoder.encode(BrandInvitationCreateRequest(inviteeUserID: inviteeUserID, role: role))
+        let body = try BackendJSON.encoder.encode(BrandInvitationCreateRequest(nickname: inviteeUserID.uuidString))
         return try await APIClient.shared.send(
             "brands/\(brandID.uuidString)/invitations",
             method: "POST", body: body, accessToken: accessToken,
@@ -346,7 +364,7 @@ enum BrandEngagementAPI {
     }
 
     static func follow(_ brandID: UUID, creatorID: UUID, accessToken: String) async throws {
-        let _: EmptyResponse = try await APIClient.shared.send(
+        let _: BrandFollowPublicDTO = try await APIClient.shared.send(
             "brands/\(brandID.uuidString)/follows/\(creatorID.uuidString)",
             method: "PUT", accessToken: accessToken
         )
@@ -371,12 +389,22 @@ enum BrandEngagementAPI {
         limit: Int = 50,
         offset: Int = 0
     ) async throws -> CreatorDiscoveryPageDTO {
-        var components: [String] = ["limit=\(limit)", "offset=\(offset)", "sort_by=\(sortBy)", "sort_order=\(sortOrder)"]
-        if let query { components.append("query=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)") }
-        if let contentFocus, !contentFocus.isEmpty {
-            components.append("content_focus=\(contentFocus.joined(separator: ",").addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "offset", value: String(offset)),
+            URLQueryItem(name: "sort_by", value: sortBy),
+            URLQueryItem(name: "sort_order", value: sortOrder)
+        ]
+        if let query, !query.isEmpty {
+            components.queryItems?.append(URLQueryItem(name: "query", value: query))
         }
-        let path = "brands/\(brandID.uuidString)/creator-discovery?\(components.joined(separator: "&"))"
+        if let contentFocus, !contentFocus.isEmpty {
+            components.queryItems?.append(
+                URLQueryItem(name: "content_focus", value: contentFocus.joined(separator: ","))
+            )
+        }
+        let path = "brands/\(brandID.uuidString)/creator-discovery?\(components.percentEncodedQuery ?? "")"
         return try await APIClient.shared.send(path, accessToken: accessToken)
     }
 
@@ -394,7 +422,7 @@ enum BrandEngagementAPI {
         accessToken: String
     ) async throws -> BrandInterestPublicDTO {
         let body = try BackendJSON.encoder.encode(
-            BrandInterestCreateRequest(creatorID: creatorID, projectID: projectID, message: message)
+            BrandInterestCreateRequest(creatorID: creatorID, message: message)
         )
         return try await APIClient.shared.send(
             "brands/\(brandID.uuidString)/interests",
@@ -426,14 +454,14 @@ enum BrandEngagementAPI {
 
     static func updateInboxItem(_ itemID: UUID, read: Bool? = nil, accessToken: String) async throws {
         struct InboxUpdateRequest: Encodable {
-            var read: Bool?
+            var isRead: Bool?
             func encode(to encoder: Encoder) throws {
                 var container = encoder.container(keyedBy: CodingKeys.self)
-                try container.encodeIfPresent(read, forKey: .read)
+                try container.encodeIfPresent(isRead, forKey: .isRead)
             }
-            enum CodingKeys: String, CodingKey { case read }
+            enum CodingKeys: String, CodingKey { case isRead = "is_read" }
         }
-        let body = try BackendJSON.encoder.encode(InboxUpdateRequest(read: read))
+        let body = try BackendJSON.encoder.encode(InboxUpdateRequest(isRead: read))
         let _: EmptyResponse = try await APIClient.shared.send(
             "users/me/brand-inbox/\(itemID.uuidString)",
             method: "PATCH", body: body, accessToken: accessToken
@@ -450,16 +478,14 @@ enum BrandEngagementAPI {
         accessToken: String
     ) async throws {
         struct InterestResponseRequest: Encodable {
-            var action: String?
-            var message: String?
+            var status: String
             func encode(to encoder: Encoder) throws {
                 var container = encoder.container(keyedBy: CodingKeys.self)
-                try container.encodeIfPresent(action, forKey: .action)
-                try container.encodeIfPresent(message, forKey: .message)
+                try container.encode(status, forKey: .status)
             }
-            enum CodingKeys: String, CodingKey { case action, message }
+            enum CodingKeys: String, CodingKey { case status }
         }
-        let body = try BackendJSON.encoder.encode(InterestResponseRequest(action: action, message: message))
+        let body = try BackendJSON.encoder.encode(InterestResponseRequest(status: action ?? "accepted"))
         let _: EmptyResponse = try await APIClient.shared.send(
             "users/me/brand-interests/\(interestID.uuidString)",
             method: "PATCH", body: body, accessToken: accessToken

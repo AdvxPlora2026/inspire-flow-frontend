@@ -1056,7 +1056,7 @@ private struct MessageBubble: View {
                     .foregroundStyle(.white)
                 }
 
-                Text(message.text)
+                Text((try? AttributedString(markdown: message.text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(message.text))
                     .font(.subheadline)
                     .lineSpacing(3)
                     .foregroundStyle(
