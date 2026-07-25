@@ -30,6 +30,13 @@ struct inspireFlowApp: App {
                 await session.loadCreatorProfile()
                 await appStore.syncRemoteData(accessToken: session.accessToken)
             }
+            .onChange(of: session.userID) { _, userID in
+                guard userID != nil, !session.isDemoMode else { return }
+                Task {
+                    await session.loadCreatorProfile()
+                    await appStore.syncRemoteData(accessToken: session.accessToken)
+                }
+            }
         }
     }
 }

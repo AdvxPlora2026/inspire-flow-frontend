@@ -313,6 +313,15 @@ final class AppStore: ObservableObject {
 
     func setRemoteConversationID(_ conversationID: UUID, for projectID: UUID) {
         remoteConversationIDs[projectID] = conversationID
+        persistRemoteConversationIDs()
+    }
+
+    func removeRemoteConversationID(for projectID: UUID) {
+        remoteConversationIDs.removeValue(forKey: projectID)
+        persistRemoteConversationIDs()
+    }
+
+    private func persistRemoteConversationIDs() {
         if let data = try? JSONEncoder().encode(remoteConversationIDs) {
             defaults.set(data, forKey: remoteConversationIDsKey)
         }

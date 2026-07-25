@@ -6,6 +6,7 @@ struct InspirationRecordView: View {
     @EnvironmentObject private var ring: RingManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @StateObject private var audioRecorder = AudioRecorder()
 
     var projectID: UUID?
 
@@ -18,6 +19,8 @@ struct InspirationRecordView: View {
     @State private var timer: Timer?
     @State private var savedCapture: InspirationCapture?
     @State private var pulse = false
+    @State private var recordedAudioURL: URL?
+    @State private var processingError: String?
 
     private let questions = [
         "这条视频最想讲给谁看？",
@@ -47,6 +50,9 @@ struct InspirationRecordView: View {
                         case .recording:
                             recordingSection
                                 .transition(sectionTransition)
+                        case .transcribing:
+                            transcribingSection
+                                .transition(sectionTransition)
                         case .questioning:
                             questioningSection
                                 .transition(sectionTransition)
@@ -70,7 +76,10 @@ struct InspirationRecordView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .onDisappear { stopTimer() }
+        .onDisappear {
+            stopTimer()
+            audioRecorder.discard()
+        }
         .onReceive(ring.primaryActionSignal) { handleCaptureToggle() }
     }
 
@@ -157,7 +166,7 @@ struct InspirationRecordView: View {
 
             ShengbianGlassCard {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("实时转录（演示模式）", systemImage: "text.bubble")
+                    Label(session.isDemoMode ? "实时转录（演示模式）" : "录音将在停止后安全转录", systemImage: "text.bubble")
                         .font(ShengbianTypography.caption)
                         .foregroundStyle(ShengbianColors.tertiaryText)
 
@@ -169,6 +178,40 @@ struct InspirationRecordView: View {
                 }
             }
         }
+    }
+
+    private var transcribingSection: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            if let processingError {
+                ShengbianStatusLabel(title: "转录失败", symbol: "exclamationmark.triangle.fill", state: .warning)
+                ShengbianGlassCard {
+                    Text(processingError)
+                        .font(ShengbianTypography.body)
+                        .foregroundStyle(ShengbianColors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Button("重试转录") {
+                    Task { await transcribeRecording() }
+                }
+                .buttonStyle(.borderedProminent)
+                Button("重新录制") {
+                    audioRecorder.discard()
+                    recordedAudioURL = nil
+                    self.processingError = nil
+                    phase = .ready
+                }
+                .buttonStyle(.bordered)
+            } else {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(.white)
+                Text("正在上传并转录录音…")
+                    .font(ShengbianTypography.headline)
+                Text("请保持网络连接。完成后灵感会保存到你的账户。")
+                    .shengbianBodyText(secondary: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - PAWN Questioning
@@ -275,7 +318,11 @@ struct InspirationRecordView: View {
     private func doneSection(_ capture: InspirationCapture) -> some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
-                ShengbianStatusLabel(title: "创作方案已生成", symbol: "checkmark.circle.fill", state: .success)
+                ShengbianStatusLabel(
+                    title: capture.bilibiliPack == nil ? "灵感已保存" : "创作方案已生成",
+                    symbol: "checkmark.circle.fill",
+                    state: .success
+                )
                 if capture.isDemoFallback {
                     ShengbianStatusLabel(title: "演示数据", symbol: "info.circle", state: .warning)
                 }
@@ -461,12 +508,12 @@ struct InspirationRecordView: View {
             Divider().background(ShengbianColors.glassBorder)
 
             HStack {
-                Text("当前使用演示转录，未请求麦克风权限")
+                Text(session.isDemoMode ? "当前使用演示转录，不会请求麦克风权限" : "录音会上传到你的账户并由后端转录")
                     .font(ShengbianTypography.caption)
                     .foregroundStyle(ShengbianColors.tertiaryText)
                 Spacer()
-                Image(systemName: "waveform.badge.exclamationmark")
-                    .foregroundStyle(ShengbianColors.warning)
+                Image(systemName: session.isDemoMode ? "waveform.badge.exclamationmark" : "lock.shield.fill")
+                    .foregroundStyle(session.isDemoMode ? ShengbianColors.warning : ShengbianColors.success)
                     .font(.caption)
             }
             .padding(.horizontal, ShengbianMetrics.pageMargin)
@@ -475,7 +522,10 @@ struct InspirationRecordView: View {
     }
 
     private var demoFallbackNote: some View {
-        Label("演示数据：实际使用时将调用真实语音识别", systemImage: "info.circle")
+        Label(
+            session.isDemoMode ? "123 演示账户使用固定数据" : "真实账户使用麦克风和后端语音识别",
+            systemImage: session.isDemoMode ? "info.circle" : "checkmark.shield"
+        )
             .font(ShengbianTypography.technical)
             .foregroundStyle(ShengbianColors.tertiaryText)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -492,7 +542,7 @@ struct InspirationRecordView: View {
     private func handleCaptureToggle() {
         switch phase {
         case .ready:
-            startRecording()
+            Task { await startRecording() }
         case .recording:
             stopRecording()
         default:
@@ -500,14 +550,32 @@ struct InspirationRecordView: View {
         }
     }
 
-    private func startRecording() {
+    private func startRecording() async {
+        processingError = nil
+        transcription = ""
+        if !session.isDemoMode {
+            guard session.accessToken != nil else {
+                processingError = "登录状态不可用，请退出后重新登录。"
+                phase = .transcribing
+                return
+            }
+            do {
+                try await audioRecorder.start()
+            } catch {
+                processingError = error.localizedDescription
+                phase = .transcribing
+                return
+            }
+        }
         Haptics.impact(.medium)
         withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.84)) {
             phase = .recording
         }
         pulse = true
         elapsed = 0
-        simulateTranscription()
+        if session.isDemoMode {
+            simulateTranscription()
+        }
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             Task { @MainActor in
                 elapsed += 1
@@ -519,10 +587,68 @@ struct InspirationRecordView: View {
         stopTimer()
         pulse = false
         Haptics.impact(.rigid)
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
-            phase = .questioning
-            questionIndex = 0
-            answers = []
+        if session.isDemoMode {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+                phase = .questioning
+                questionIndex = 0
+                answers = []
+            }
+        } else {
+            recordedAudioURL = audioRecorder.stop()
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+                phase = .transcribing
+            }
+            Task { await transcribeRecording() }
+        }
+    }
+
+    private func transcribeRecording() async {
+        guard let accessToken = session.accessToken else {
+            processingError = "登录状态不可用，请退出后重新登录。"
+            return
+        }
+        guard let recordedAudioURL else {
+            processingError = "没有找到录音文件，请重新录制。"
+            return
+        }
+
+        processingError = nil
+        do {
+            let audioData = try Data(contentsOf: recordedAudioURL)
+            var job = try await TranscriptionAPI.submit(
+                accessToken: accessToken,
+                fileData: audioData,
+                fileName: recordedAudioURL.lastPathComponent,
+                mimeType: "audio/mp4"
+            )
+            for _ in 0..<90 where !job.isTerminal {
+                try await Task.sleep(for: .seconds(1))
+                job = try await TranscriptionAPI.status(jobID: job.id, accessToken: accessToken)
+            }
+            guard job.isTerminal else { throw TranscriptionFlowError.timedOut }
+            guard job.isSuccess, let text = job.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+                throw TranscriptionFlowError.failed(job.error?.message ?? "语音服务未返回文字。")
+            }
+            transcription = text
+            let capture = try await appStore.addInspiration(
+                transcription: text,
+                pawnQAs: [],
+                bilibiliPack: nil,
+                projectID: projectID,
+                privacy: privacy,
+                isDemoFallback: false,
+                accessToken: accessToken
+            )
+            savedCapture = capture
+            audioRecorder.discard()
+            self.recordedAudioURL = nil
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                phase = .done
+            }
+            Haptics.success()
+        } catch {
+            processingError = error.localizedDescription
+            Haptics.error()
         }
     }
 
@@ -626,9 +752,22 @@ struct InspirationRecordView: View {
 private enum RecordPhase {
     case ready
     case recording
+    case transcribing
     case questioning
     case generating
     case done
+}
+
+private enum TranscriptionFlowError: LocalizedError {
+    case timedOut
+    case failed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .timedOut: "转录等待超时，录音仍保留，可稍后重试。"
+        case .failed(let message): message
+        }
+    }
 }
 
 #Preview("InspirationRecordView") {

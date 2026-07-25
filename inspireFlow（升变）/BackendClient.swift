@@ -5,13 +5,12 @@ import Security
 
 /// Base URL for the `inspire-flow-backend` FastAPI service.
 ///
-/// Production traffic uses HTTPS, which satisfies App Transport Security
-/// without any Info.plist exceptions. For local development with the
-/// simulator, replace this with `http://127.0.0.1:8000/api/v1` (bare IP
-/// addresses are ATS-exempt). Physical-device testing against a local
-/// server needs the Mac's LAN IP instead of `127.0.0.1`.
+/// Production traffic prefers HTTPS and falls back to the backend origin
+/// when the public domain is unavailable.
 enum BackendConfig {
-    static let baseURL = URL(string: "https://platform.advx.uk/api/v1")!
+    static let baseURL = URL(string: "https://platform.advx.uk")!
+    static let fallbackBaseURLs = [URL(string: "http://116.62.42.177:8080")!]
+    static let apiPrefix = "api/v1"
 }
 
 // MARK: - JSON coding
@@ -175,12 +174,26 @@ enum KeychainTokenStore {
 actor APIClient {
     static let shared = APIClient()
 
-    private let baseURL: URL
+    private let baseURLs: [URL]
     private let session: URLSession
 
-    init(baseURL: URL = BackendConfig.baseURL, session: URLSession = .shared) {
-        self.baseURL = baseURL
+    init(
+        baseURL: URL = BackendConfig.baseURL,
+        fallbackBaseURLs: [URL] = BackendConfig.fallbackBaseURLs,
+        session: URLSession = .shared
+    ) {
+        self.baseURLs = [baseURL] + fallbackBaseURLs
         self.session = session
+    }
+
+    private func endpointURL(for path: String, baseURL: URL) -> URL {
+        baseURL
+            .appendingPathComponent(BackendConfig.apiPrefix)
+            .appendingPathComponent(path)
+    }
+
+    private func shouldUseFallback(_ response: HTTPURLResponse) -> Bool {
+        response.statusCode == 403 && response.mimeType == "text/html"
     }
 
     /// Sends a request and decodes a JSON response body.
@@ -190,28 +203,46 @@ actor APIClient {
         body: Data? = nil,
         accessToken: String? = nil
     ) async throws -> Response {
-        var request = URLRequest(url: baseURL.appendingPathComponent(path))
-        request.httpMethod = method
-        if body != nil {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        }
-        if let accessToken {
-            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        }
-        request.httpBody = body
+        var lastTransportError: Error?
 
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            throw APIClientError.transport(error)
+        for (index, baseURL) in baseURLs.enumerated() {
+            var request = URLRequest(url: endpointURL(for: path, baseURL: baseURL))
+            request.httpMethod = method
+            if body != nil {
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            }
+            if let accessToken {
+                request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            }
+            request.httpBody = body
+
+            let data: Data
+            let response: URLResponse
+            do {
+                (data, response) = try await session.data(for: request)
+            } catch {
+                lastTransportError = error
+                continue
+            }
+
+            guard let http = response as? HTTPURLResponse else {
+                if index < baseURLs.count - 1 { continue }
+                throw APIClientError.invalidResponse
+            }
+            if shouldUseFallback(http), index < baseURLs.count - 1 { continue }
+            return try decodeResponse(data: data, response: http)
         }
 
-        guard let http = response as? HTTPURLResponse else {
-            throw APIClientError.invalidResponse
+        if let lastTransportError {
+            throw APIClientError.transport(lastTransportError)
         }
+        throw APIClientError.invalidResponse
+    }
 
+    private func decodeResponse<Response: Decodable>(
+        data: Data,
+        response http: HTTPURLResponse
+    ) throws -> Response {
         guard (200..<300).contains(http.statusCode) else {
             if let envelope = try? BackendJSON.decoder.decode(APIErrorEnvelope.self, from: data) {
                 if http.statusCode == 401 {
@@ -259,12 +290,6 @@ actor APIClient {
         accessToken: String? = nil
     ) async throws -> Response {
         let boundary = UUID().uuidString
-        var urlRequest = URLRequest(url: baseURL.appendingPathComponent(path))
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        if let accessToken {
-            urlRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        }
 
         var bodyData = Data()
         for (key, value) in formFields {
@@ -277,24 +302,37 @@ actor APIClient {
         bodyData.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
         bodyData.append(fileData)
         bodyData.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
-        urlRequest.httpBody = bodyData
 
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: urlRequest)
-        } catch {
-            throw APIClientError.transport(error)
-        }
-
-        guard let http = response as? HTTPURLResponse else { throw APIClientError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else {
-            if let envelope = try? BackendJSON.decoder.decode(APIErrorEnvelope.self, from: data) {
-                if http.statusCode == 401 { throw APIClientError.unauthorized }
-                throw APIClientError.server(status: http.statusCode, code: envelope.error.code, message: envelope.error.message)
+        var lastTransportError: Error?
+        for (index, baseURL) in baseURLs.enumerated() {
+            var urlRequest = URLRequest(url: endpointURL(for: path, baseURL: baseURL))
+            urlRequest.httpMethod = "POST"
+            urlRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            if let accessToken {
+                urlRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
             }
-            throw APIClientError.server(status: http.statusCode, code: "unknown_error", message: "请求失败（状态码 \(http.statusCode)）。")
+            urlRequest.httpBody = bodyData
+
+            let data: Data
+            let response: URLResponse
+            do {
+                (data, response) = try await session.data(for: urlRequest)
+            } catch {
+                lastTransportError = error
+                continue
+            }
+
+            guard let http = response as? HTTPURLResponse else {
+                if index < baseURLs.count - 1 { continue }
+                throw APIClientError.invalidResponse
+            }
+            if shouldUseFallback(http), index < baseURLs.count - 1 { continue }
+            return try decodeResponse(data: data, response: http)
         }
-        return try BackendJSON.decoder.decode(Response.self, from: data)
+
+        if let lastTransportError {
+            throw APIClientError.transport(lastTransportError)
+        }
+        throw APIClientError.invalidResponse
     }
 }

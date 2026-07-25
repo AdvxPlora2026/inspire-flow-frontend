@@ -203,7 +203,10 @@ struct RingDeviceView: View {
                     }
 
                     if ring.isConnected {
-                        Button(role: .destructive) { ring.disconnect() } label: { Label("断开连接", systemImage: "xmark.circle") }
+                        HStack(spacing: 16) {
+                            Button { ring.disconnect() } label: { Label("断开连接", systemImage: "xmark.circle") }
+                            Button(role: .destructive) { ring.forgetRing() } label: { Label("忘记设备", systemImage: "trash") }
+                        }
                     } else {
                         ShengbianPrimaryButton(
                             title: ring.state == .scanning || ring.state == .connecting ? "正在连接…" : "扫描并连接",

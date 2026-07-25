@@ -13,6 +13,7 @@ struct CreatorHomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
                     greeting
+                    ringConnectionAction
                     captureAction
                     currentWork
                     recentInspirations
@@ -45,6 +46,38 @@ struct CreatorHomeView: View {
                 RingDeviceView()
             }
         }
+    }
+
+    private var ringConnectionAction: some View {
+        Button {
+            Haptics.impact(.light)
+            selectedTool = .device
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: ring.isConnected ? "circle.fill" : "dot.radiowaves.left.and.right")
+                    .foregroundStyle(ring.isConnected ? ShengbianColors.success : ShengbianColors.secondaryText)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(ring.isConnected ? "Zilo 戒指已连接" : "寻找并连接 Zilo 戒指")
+                        .font(ShengbianTypography.bodyEmphasized)
+                    Text(ring.isConnected ? (ring.deviceName ?? "可使用单击与双击") : "打开附近设备连接卡片")
+                        .font(ShengbianTypography.caption)
+                        .foregroundStyle(ShengbianColors.secondaryText)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(ShengbianColors.tertiaryText)
+            }
+            .foregroundStyle(ShengbianColors.primaryText)
+            .padding(14)
+            .background(ShengbianColors.glassTintStrong, in: RoundedRectangle(cornerRadius: ShengbianMetrics.controlRadius))
+            .overlay {
+                RoundedRectangle(cornerRadius: ShengbianMetrics.controlRadius)
+                    .strokeBorder(ShengbianColors.glassBorder)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(ring.isConnected ? "Zilo 戒指已连接，打开设备" : "寻找并连接 Zilo 戒指")
     }
 
     private var greeting: some View {

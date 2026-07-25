@@ -9,6 +9,7 @@ struct LoginView: View {
     @State private var selectedRole: UserRole = .creator
     @State private var isCreatingAccount = false
     @State private var hasAttemptedSubmit = false
+    @State private var isChoosingDemoSource = false
     @FocusState private var focusedField: Field?
 
     var body: some View {
@@ -32,6 +33,22 @@ struct LoginView: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .preferredColorScheme(.dark)
+        .confirmationDialog(
+            "选择演示数据来源",
+            isPresented: $isChoosingDemoSource,
+            titleVisibility: .visible
+        ) {
+            Button("连接 platform.advx.uk（推荐）") {
+                signInOnlineDemo()
+            }
+            Button("使用本地演示数据") {
+                session.signInDemo(role: selectedRole)
+                Haptics.success()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("在线模式会使用真实 AI、语音转录和云端数据；本地模式使用固定演示内容。")
+        }
     }
 
     private var brandHeader: some View {
@@ -178,8 +195,7 @@ struct LoginView: View {
         // sandbox with freely switchable roles and resettable demo data.
         let trimmedNickname = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedNickname == "123" && password == "123" {
-            session.signInDemo(role: selectedRole)
-            Haptics.success()
+            isChoosingDemoSource = true
             return
         }
 
@@ -194,6 +210,17 @@ struct LoginView: View {
             } else {
                 success = await session.signIn(nickname: trimmedNickname, password: password, role: selectedRole)
             }
+            if success {
+                Haptics.success()
+            } else {
+                Haptics.error()
+            }
+        }
+    }
+
+    private func signInOnlineDemo() {
+        Task {
+            let success = await session.signInOnlineDemo(role: selectedRole)
             if success {
                 Haptics.success()
             } else {

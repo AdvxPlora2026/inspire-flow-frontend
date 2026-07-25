@@ -63,6 +63,7 @@ final class AppSession: ObservableObject {
         let resolvedDisplayName: String
 
         if savedDemo {
+            KeychainTokenStore.clear()
             isAuthenticated = true
             resolvedDisplayName = "演示用户"
             userID = nil
@@ -129,6 +130,29 @@ final class AppSession: ObservableObject {
         await authenticate(nickname: nickname, password: password, role: role, isRegistering: true)
     }
 
+    @discardableResult
+    func signInOnlineDemo(role: UserRole) async -> Bool {
+        isAuthenticating = true
+        authErrorMessage = nil
+        defer { isAuthenticating = false }
+
+        do {
+            let created = try await AuthAPI.demoLogin()
+            applyAuthenticatedSession(created, role: role)
+            return true
+        } catch let error as APIClientError {
+            if case .server(let status, _, _) = error, status == 404 {
+                authErrorMessage = "platform.advx.uk 尚未启用在线演示账号，请部署 /api/v1/sessions/demo，或选择本地演示数据。"
+            } else {
+                authErrorMessage = Self.message(for: error)
+            }
+            return false
+        } catch {
+            authErrorMessage = "无法连接 platform.advx.uk，请稍后重试。"
+            return false
+        }
+    }
+
     private func authenticate(nickname: String, password: String, role: UserRole, isRegistering: Bool) async -> Bool {
         isAuthenticating = true
         authErrorMessage = nil
@@ -139,20 +163,7 @@ final class AppSession: ObservableObject {
                 _ = try await AuthAPI.register(nickname: nickname, password: password)
             }
             let created = try await AuthAPI.login(nickname: nickname, password: password)
-            KeychainTokenStore.save(
-                .init(
-                    accessToken: created.accessToken,
-                    expiresAt: created.expiresAt,
-                    userID: created.user.id,
-                    nickname: created.user.nickname
-                )
-            )
-
-            self.role = role
-            displayName = created.user.nickname
-            userID = created.user.id
-            isAuthenticated = true
-            persistRole()
+            applyAuthenticatedSession(created, role: role)
 
             if isRegistering && role == .creator {
                 creatorProfile = .empty(displayName: displayName)
@@ -167,6 +178,24 @@ final class AppSession: ObservableObject {
             authErrorMessage = "网络连接失败，请检查后端服务是否可用。"
             return false
         }
+    }
+
+    private func applyAuthenticatedSession(_ created: SessionCreatedDTO, role: UserRole) {
+        KeychainTokenStore.save(
+            .init(
+                accessToken: created.accessToken,
+                expiresAt: created.expiresAt,
+                userID: created.user.id,
+                nickname: created.user.nickname
+            )
+        )
+        self.role = role
+        displayName = created.user.nickname
+        userID = created.user.id
+        isDemoMode = false
+        isAuthenticated = true
+        defaults.set(false, forKey: demoModeKey)
+        persistRole()
     }
 
     func saveCreatorProfile(_ profile: CreatorProfile) {
@@ -213,8 +242,10 @@ final class AppSession: ObservableObject {
     /// Signs in as a local-only demo user — no backend, no Keychain, no onboard.
     /// Demo users can switch roles freely and reset local demo data from Account.
     func signInDemo(role: UserRole) {
+        KeychainTokenStore.clear()
         self.role = role
         displayName = "演示用户"
+        userID = nil
         isDemoMode = true
         isAuthenticated = true
         needsCreatorProfileSetup = false

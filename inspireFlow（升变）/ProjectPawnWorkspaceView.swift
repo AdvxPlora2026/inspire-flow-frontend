@@ -366,10 +366,12 @@ struct ProjectPawnWorkspaceView: View {
         appStore.sendCreatorMessage(content, projectID: project.id)
         draft = ""
         Haptics.impact(.light)
-        if let accessToken = session.accessToken {
+        if session.isDemoMode {
+            generateResponse(project: project, prompt: content)
+        } else if let accessToken = session.accessToken {
             generateRemoteResponse(project: project, prompt: content, accessToken: accessToken)
         } else {
-            generateResponse(project: project, prompt: content)
+            appendAuthenticationFailure(projectID: project.id)
         }
     }
 
@@ -378,21 +380,9 @@ struct ProjectPawnWorkspaceView: View {
         generatingMessageID = messageID
         generationTask = Task { @MainActor in
             do {
-                let conversationID: UUID
-                if let existing = appStore.remoteConversationID(for: project.id) {
-                    conversationID = existing
-                } else {
-                    let created = try await ConversationAPI.create(
-                        title: project.name,
-                        accessToken: accessToken
-                    )
-                    conversationID = created.id
-                    appStore.setRemoteConversationID(created.id, for: project.id)
-                }
-
-                let turn = try await ConversationAPI.sendMessage(
-                    conversationID,
-                    content: "项目《\(project.name)》：\(prompt)",
+                let turn = try await sendRemoteMessage(
+                    project: project,
+                    prompt: prompt,
                     accessToken: accessToken
                 )
                 appStore.updatePawnMessage(
@@ -418,14 +408,59 @@ struct ProjectPawnWorkspaceView: View {
         }
     }
 
+    private func sendRemoteMessage(
+        project: CreatorProject,
+        prompt: String,
+        accessToken: String
+    ) async throws -> AgentTurnPublicDTO {
+        let conversationID: UUID
+        if let existing = appStore.remoteConversationID(for: project.id) {
+            conversationID = existing
+        } else {
+            let created = try await ConversationAPI.create(title: project.name, accessToken: accessToken)
+            conversationID = created.id
+            appStore.setRemoteConversationID(created.id, for: project.id)
+        }
+
+        do {
+            return try await ConversationAPI.sendMessage(
+                conversationID,
+                content: "项目《\(project.name)》：\(prompt)",
+                accessToken: accessToken
+            )
+        } catch APIClientError.server(let status, _, _) where status == 404 {
+            appStore.removeRemoteConversationID(for: project.id)
+            let replacement = try await ConversationAPI.create(title: project.name, accessToken: accessToken)
+            appStore.setRemoteConversationID(replacement.id, for: project.id)
+            return try await ConversationAPI.sendMessage(
+                replacement.id,
+                content: "项目《\(project.name)》：\(prompt)",
+                accessToken: accessToken
+            )
+        }
+    }
+
+    private func appendAuthenticationFailure(projectID: UUID) {
+        guard let messageID = appStore.beginPawnMessage(projectID: projectID) else { return }
+        appStore.updatePawnMessage(
+            messageID,
+            text: "登录状态不可用，PAWN 没有发送请求。请退出后重新登录。",
+            isComplete: true,
+            projectID: projectID
+        )
+        Haptics.error()
+    }
+
     private func regenerate(after message: PawnMessage, project: CreatorProject) {
         guard !isGenerating else { return }
         appStore.removeMessage(message.id, projectID: project.id)
         let prompt = conversation?.messages.last(where: { $0.role == .creator })?.text ?? project.initialIdea
-        if let accessToken = session.accessToken {
+        if session.isDemoMode {
+            generateResponse(project: project, prompt: prompt)
+        } else if let accessToken = session.accessToken {
             generateRemoteResponse(project: project, prompt: prompt, accessToken: accessToken)
         } else {
-            generateResponse(project: project, prompt: prompt)
+            appendAuthenticationFailure(projectID: project.id)
         }
     }
 

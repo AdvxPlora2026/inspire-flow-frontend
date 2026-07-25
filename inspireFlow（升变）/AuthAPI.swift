@@ -59,6 +59,10 @@ enum AuthAPI {
         return try await APIClient.shared.send("sessions", method: "POST", body: body)
     }
 
+    static func demoLogin() async throws -> SessionCreatedDTO {
+        try await APIClient.shared.send("sessions/demo", method: "POST")
+    }
+
     static func logout(accessToken: String) async throws {
         let _: EmptyResponse = try await APIClient.shared.send(
             "sessions/current",
