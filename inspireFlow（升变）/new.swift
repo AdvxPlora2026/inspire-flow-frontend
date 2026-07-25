@@ -29,6 +29,8 @@ struct NewProjectView: View {
     @State private var successFeedbackTrigger = 0
     @State private var isSaving = false
     @State private var saveError: String?
+    @State private var isDraftGenerating = false
+    @State private var draftError: String?
 
     private let maximumProjectNameLength = 40
     private let maximumIdeaLength = 500
@@ -58,6 +60,10 @@ struct NewProjectView: View {
                     projectNameSection
 
                     initialIdeaSection
+
+                    if !session.isDemoMode && !normalizedProjectName.isEmpty && !initialIdea.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        pawnDraftSection
+                    }
 
                     contentTypeSection
 
@@ -133,6 +139,51 @@ struct NewProjectView: View {
         projectName.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
+    }
+
+    private var pawnDraftSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("PAWN 协助")
+                .font(.headline)
+                .foregroundStyle(.white)
+
+            if draftError != nil {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(draftError ?? "")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    Spacer()
+                    Button("重试") {
+                        draftError = nil
+                        generateDraft()
+                    }
+                }
+                .padding(12)
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(10)
+            } else {
+                Button {
+                    generateDraft()
+                } label: {
+                    HStack {
+                        if isDraftGenerating { ProgressView().tint(.black) }
+                        Text("让 PAWN 完善这个想法")
+                        Spacer()
+                        Image(systemName: "sparkles")
+                    }
+                    .font(.headline)
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color.white.opacity(0.9))
+                    .cornerRadius(10)
+                }
+                .buttonStyle(.plain)
+                .disabled(isDraftGenerating)
+            }
+        }
     }
 
     private var canCreate: Bool {
@@ -411,6 +462,37 @@ struct NewProjectView: View {
                 .easeOut(duration: 0.16)
             ) {
                 changes()
+            }
+        }
+    }
+
+    private func generateDraft() {
+        guard !initialIdea.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let accessToken = session.accessToken else { return }
+        isDraftGenerating = true
+        draftError = nil
+        Task {
+            do {
+                let draft = try await ProjectAPI.draft(
+                    description: initialIdea,
+                    accessToken: accessToken
+                )
+                projectName = draft.title
+                selectedContentType = ProjectContentType.allCases.first { $0.title == draft.type } ?? .video
+                if draft.summary.contains("大纲") || draft.summary.contains("框架") {
+                    selectedGoal = .outline
+                } else if draft.summary.contains("脚本") {
+                    selectedGoal = .script
+                } else {
+                    selectedGoal = .outline
+                }
+                initialIdea = draft.summary
+                Haptics.success()
+                isDraftGenerating = false
+            } catch {
+                draftError = error.localizedDescription
+                isDraftGenerating = false
+                Haptics.error()
             }
         }
     }

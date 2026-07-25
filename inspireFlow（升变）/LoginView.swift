@@ -38,7 +38,7 @@ struct LoginView: View {
             isPresented: $isChoosingDemoSource,
             titleVisibility: .visible
         ) {
-            Button("连接 platform.advx.uk（推荐）") {
+            Button("连接在线后端（推荐）") {
                 signInOnlineDemo()
             }
             Button("使用本地演示数据") {

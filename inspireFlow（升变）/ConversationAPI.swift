@@ -110,7 +110,7 @@ private struct ConversationUpdateRequest: Encodable {
 enum ConversationAPI {
     static func create(title: String? = nil, accessToken: String) async throws -> ConversationPublicDTO {
         let body = try BackendJSON.encoder.encode(ConversationCreateRequest(title: title))
-        return try await APIClient.shared.send("conversations", method: "POST", body: body, accessToken: accessToken)
+        return try await APIClient.shared.send("conversations", method: "POST", body: body, accessToken: accessToken, idempotencyKey: UUID().uuidString)
     }
 
     static func list(accessToken: String, includeArchived: Bool = false, limit: Int = 50, offset: Int = 0) async throws -> ConversationPageDTO {
@@ -148,7 +148,8 @@ enum ConversationAPI {
             "conversations/\(conversationID.uuidString)/messages",
             method: "POST",
             body: body,
-            accessToken: accessToken
+            accessToken: accessToken,
+            idempotencyKey: UUID().uuidString
         )
     }
 }

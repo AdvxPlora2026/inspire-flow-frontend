@@ -13,20 +13,22 @@ struct InspirationRecordView: View {
     @State private var phase: RecordPhase = .ready
     @State private var elapsed: TimeInterval = 0
     @State private var transcription = ""
+    @State private var questions = [
+        "这条视频最想讲给谁看？",
+        "你希望它是什么形式？",
+        "最重要的开场画面是什么？"
+    ]
     @State private var questionIndex = 0
     @State private var answers: [String] = []
+    @State private var answerDraft = ""
+    @State private var pawnConversationID: UUID?
+    @State private var isPawnWorking = false
     @State private var privacy: InspirationPrivacy = .privateOnly
     @State private var timer: Timer?
     @State private var savedCapture: InspirationCapture?
     @State private var pulse = false
     @State private var recordedAudioURL: URL?
     @State private var processingError: String?
-
-    private let questions = [
-        "这条视频最想讲给谁看？",
-        "你希望它是什么形式？",
-        "最重要的开场画面是什么？"
-    ]
 
     private let demoAnswers = [
         "第一次尝试无屏创作的 B 站创作者",
@@ -233,31 +235,62 @@ struct InspirationRecordView: View {
                         .font(ShengbianTypography.title3)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text("通过耳机语音回答，或使用演示答案：")
+                    Text(session.isDemoMode ? "使用演示答案继续：" : "输入回答，PAWN 会继续追问：")
                         .font(ShengbianTypography.caption)
                         .foregroundStyle(ShengbianColors.tertiaryText)
                 }
             }
 
-            Button {
-                submitAnswer(demoAnswers[questionIndex])
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "waveform")
-                    Text(demoAnswers[questionIndex])
-                        .font(ShengbianTypography.bodyEmphasized)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            if session.isDemoMode {
+                Button {
+                    submitAnswer(demoAnswers[questionIndex])
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "waveform")
+                        Text(demoAnswers[questionIndex])
+                            .font(ShengbianTypography.bodyEmphasized)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .foregroundStyle(ShengbianColors.inverseText)
+                    .padding(14)
+                    .background(
+                        ShengbianColors.primaryAction,
+                        in: RoundedRectangle(cornerRadius: ShengbianMetrics.controlRadius, style: .continuous)
+                    )
                 }
-                .foregroundStyle(ShengbianColors.inverseText)
-                .padding(14)
-                .background(
-                    ShengbianColors.primaryAction,
-                    in: RoundedRectangle(cornerRadius: ShengbianMetrics.controlRadius, style: .continuous)
-                )
+                .buttonStyle(.plain)
+            } else {
+                TextField("输入你的回答", text: $answerDraft, axis: .vertical)
+                    .lineLimit(2...5)
+                    .textFieldStyle(.plain)
+                    .padding(14)
+                    .background(
+                        ShengbianColors.glassTintStrong,
+                        in: RoundedRectangle(cornerRadius: ShengbianMetrics.controlRadius)
+                    )
+
+                Button {
+                    submitAnswer(answerDraft)
+                } label: {
+                    HStack {
+                        if isPawnWorking { ProgressView().tint(.black) }
+                        Text(questionIndex == 2 ? "生成方案" : "提交回答")
+                        Spacer()
+                        Image(systemName: "arrow.up")
+                    }
+                    .font(ShengbianTypography.headline)
+                    .foregroundStyle(ShengbianColors.inverseText)
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: ShengbianMetrics.minimumControlHeight)
+                    .background(
+                        ShengbianColors.primaryAction,
+                        in: RoundedRectangle(cornerRadius: ShengbianMetrics.controlRadius)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(answerDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPawnWorking)
             }
-            .buttonStyle(.plain)
-            .accessibilityHint("使用演示答案回答此问题")
 
             if !answers.isEmpty {
                 previousAnswers
@@ -310,7 +343,7 @@ struct InspirationRecordView: View {
             Spacer(minLength: 40)
         }
         .frame(maxWidth: .infinity)
-        .task { await simulateGeneration() }
+        .task { await generatePlan() }
     }
 
     // MARK: - Done
@@ -630,22 +663,9 @@ struct InspirationRecordView: View {
                 throw TranscriptionFlowError.failed(job.error?.message ?? "语音服务未返回文字。")
             }
             transcription = text
-            let capture = try await appStore.addInspiration(
-                transcription: text,
-                pawnQAs: [],
-                bilibiliPack: nil,
-                projectID: projectID,
-                privacy: privacy,
-                isDemoFallback: false,
-                accessToken: accessToken
-            )
-            savedCapture = capture
             audioRecorder.discard()
             self.recordedAudioURL = nil
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
-                phase = .done
-            }
-            Haptics.success()
+            try await beginPawnFlow(transcription: text, accessToken: accessToken)
         } catch {
             processingError = error.localizedDescription
             Haptics.error()
@@ -668,15 +688,128 @@ struct InspirationRecordView: View {
     }
 
     private func submitAnswer(_ answer: String) {
+        let normalizedAnswer = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedAnswer.isEmpty else { return }
         Haptics.selection()
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
-            answers.append(answer)
-            if questionIndex < questions.count - 1 {
-                questionIndex += 1
-            } else {
-                phase = .generating
+        answers.append(normalizedAnswer)
+        answerDraft = ""
+        if session.isDemoMode {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+                if questionIndex < questions.count - 1 {
+                    questionIndex += 1
+                } else {
+                    phase = .generating
+                }
             }
+        } else if questionIndex < 2 {
+            Task { await requestNextQuestion(after: normalizedAnswer) }
+        } else {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { phase = .generating }
         }
+    }
+
+    private func beginPawnFlow(transcription: String, accessToken: String) async throws {
+        let title = projectID.flatMap { id in appStore.projects.first(where: { $0.id == id })?.name } ?? "语音灵感"
+        let conversation = try await ConversationAPI.create(title: title, accessToken: accessToken)
+        pawnConversationID = conversation.id
+        if let projectID { appStore.setRemoteConversationID(conversation.id, for: projectID) }
+        let turn = try await ConversationAPI.sendMessage(
+            conversation.id,
+            content: """
+            这是一条刚完成转写的创作灵感：\(transcription)
+            你是创作搭档 PAWN。请只提出第一个最关键的澄清问题，问题应简短、具体，不要解释。
+            """,
+            accessToken: accessToken
+        )
+        questions = [normalizedQuestion(turn.assistantMessage.content)]
+        questionIndex = 0
+        answers = []
+        processingError = nil
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { phase = .questioning }
+        Haptics.success()
+    }
+
+    private func requestNextQuestion(after answer: String) async {
+        guard let accessToken = session.accessToken, let pawnConversationID else { return }
+        isPawnWorking = true
+        defer { isPawnWorking = false }
+        do {
+            let nextNumber = questions.count + 1
+            let turn = try await ConversationAPI.sendMessage(
+                pawnConversationID,
+                content: "我的回答：\(answer)\n请只提出第 \(nextNumber) 个关键问题，不要重复之前的问题，不要解释。",
+                accessToken: accessToken
+            )
+            questions.append(normalizedQuestion(turn.assistantMessage.content))
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { questionIndex += 1 }
+        } catch {
+            processingError = "PAWN 追问失败：\(error.localizedDescription)"
+            Haptics.error()
+        }
+    }
+
+    private func normalizedQuestion(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func generatePlan() async {
+        if session.isDemoMode {
+            await simulateGeneration()
+            return
+        }
+        guard let accessToken = session.accessToken, let pawnConversationID else {
+            processingError = "PAWN 会话不可用，请重新录制。"
+            phase = .transcribing
+            return
+        }
+        do {
+            let turn = try await ConversationAPI.sendMessage(
+                pawnConversationID,
+                content: """
+                三个问题已经回答完毕。请生成可直接执行的 Bilibili 创作方案，并严格使用以下四行格式：
+                标题：...
+                3秒钩子：...
+                结构大纲：...
+                拍摄清单：...
+                """,
+                accessToken: accessToken
+            )
+            let response = turn.assistantMessage.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let qas = zip(questions, answers).map { PawnQA(id: UUID(), question: $0.0, answer: $0.1) }
+            let capture = try await appStore.addInspiration(
+                transcription: transcription,
+                pawnQAs: qas,
+                bilibiliPack: parsePack(response),
+                projectID: projectID,
+                privacy: privacy,
+                isDemoFallback: false,
+                sourceType: .voice,
+                accessToken: accessToken
+            )
+            savedCapture = capture
+            phase = .done
+            Haptics.success()
+        } catch {
+            processingError = "PAWN 生成失败：\(error.localizedDescription)"
+            phase = .transcribing
+            Haptics.error()
+        }
+    }
+
+    private func parsePack(_ response: String) -> BilibiliPack {
+        func value(after labels: [String]) -> String? {
+            response.split(whereSeparator: \.isNewline).compactMap { rawLine -> String? in
+                let line = String(rawLine).trimmingCharacters(in: .whitespaces)
+                guard let label = labels.first(where: { line.hasPrefix($0) }) else { return nil }
+                return String(line.dropFirst(label.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }.first
+        }
+        return BilibiliPack(
+            title: value(after: ["标题：", "标题:"]) ?? "从一句灵感开始",
+            hook: value(after: ["3秒钩子：", "3 秒钩子：", "3秒钩子:"]) ?? "用最真实的一刻抓住观众。",
+            outline: value(after: ["结构大纲：", "结构大纲:"]) ?? response,
+            shotList: value(after: ["拍摄清单：", "拍摄清单:"]) ?? "根据结构大纲拆分现场镜头"
+        )
     }
 
     private func simulateGeneration() async {

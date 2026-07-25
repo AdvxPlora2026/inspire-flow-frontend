@@ -123,7 +123,7 @@ enum ProjectAPI {
         accessToken: String
     ) async throws -> ProjectDraftDTO {
         let body = try BackendJSON.encoder.encode(ProjectDraftRequest(description: description))
-        return try await APIClient.shared.send("projects/drafts", method: "POST", body: body, accessToken: accessToken)
+        return try await APIClient.shared.send("projects/drafts", method: "POST", body: body, accessToken: accessToken, idempotencyKey: UUID().uuidString)
     }
 
     /// Create a project from the validated fields.
@@ -138,7 +138,7 @@ enum ProjectAPI {
         let body = try BackendJSON.encoder.encode(
             ProjectCreateRequest(title: title, type: type, audience: audience, summary: summary, iconURL: iconURL)
         )
-        return try await APIClient.shared.send("projects", method: "POST", body: body, accessToken: accessToken)
+        return try await APIClient.shared.send("projects", method: "POST", body: body, accessToken: accessToken, idempotencyKey: UUID().uuidString)
     }
 
     /// List projects (sorted by recent update descending).

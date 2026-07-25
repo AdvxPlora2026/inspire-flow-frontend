@@ -7,6 +7,7 @@ struct AccountView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
     @State private var isConfirmingSignOut = false
     @State private var isEditingCreatorProfile = false
+    @State private var isShowingWorkshop = false
     @State private var isShowingGuide = false
     @State private var guideCompletion = false
     @State private var isConfirmingReset = false
@@ -36,6 +37,12 @@ struct AccountView: View {
                             isEditingCreatorProfile = true
                         } label: {
                             Label("创作者资料与可见性", systemImage: "person.text.rectangle")
+                        }
+
+                        Button {
+                            isShowingWorkshop = true
+                        } label: {
+                            Label("创作主页与品牌授权", systemImage: "megaphone.fill")
                         }
                     }
 
@@ -127,6 +134,9 @@ struct AccountView: View {
         }
         .sheet(isPresented: $isEditingCreatorProfile) {
             CreatorProfileSetupView(mode: .editing)
+        }
+        .sheet(isPresented: $isShowingWorkshop) {
+            WorkshopView()
         }
         .fullScreenCover(isPresented: $isShowingGuide) {
             StartView(hasCompletedOnboarding: $guideCompletion)

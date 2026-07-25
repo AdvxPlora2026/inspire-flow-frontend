@@ -68,14 +68,7 @@ struct ProjectDetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if project.kind == .commercial && !session.isDemoMode {
-                Label("云端商业任务状态待接入", systemImage: "cloud")
-                    .font(ShengbianTypography.headline)
-                    .foregroundStyle(ShengbianColors.secondaryText)
-                    .frame(maxWidth: .infinity, minHeight: ShengbianMetrics.minimumControlHeight)
-                    .background(
-                        ShengbianColors.glassTintStrong,
-                        in: RoundedRectangle(cornerRadius: ShengbianMetrics.controlRadius, style: .continuous)
-                    )
+                CommercialTaskView(projectID: project.id, projectName: project.name)
             } else if project.stage != .settled {
                 Button {
                     advanceStage(project)

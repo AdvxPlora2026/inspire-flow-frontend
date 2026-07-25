@@ -17,6 +17,10 @@ struct ClientMainView: View {
                 .tabItem { Label("需求助手", systemImage: "sparkles") }
                 .tag(ClientTab.messages)
 
+            NavigationStack { BrandDiscoveryView() }
+                .tabItem { Label("发现", systemImage: "binoculars.fill") }
+                .tag(ClientTab.discovery)
+
             NavigationStack { AccountView() }
                 .tabItem { Label("我的", systemImage: "person.crop.circle") }
                 .tag(ClientTab.account)
@@ -27,6 +31,6 @@ struct ClientMainView: View {
     }
 
     private enum ClientTab: Hashable {
-        case home, briefs, messages, account
+        case home, briefs, messages, discovery, account
     }
 }

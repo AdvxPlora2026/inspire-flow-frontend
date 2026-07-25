@@ -66,7 +66,8 @@ enum TranscriptionAPI {
                 "language": language,
                 "use_itn": useITN ? "true" : "false"
             ],
-            accessToken: accessToken
+            accessToken: accessToken,
+            idempotencyKey: UUID().uuidString
         )
     }
 

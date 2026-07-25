@@ -469,7 +469,7 @@ final class AppStore: ObservableObject {
         let remote = try await InspirationAPI.create(
             accessToken: accessToken,
             content: transcription,
-            sourceType: sourceType,
+            sourceType: sourceType == .agent ? .manual : sourceType,
             projectIDs: projectID.map { [$0] } ?? []
         )
         let capture = InspirationCapture(

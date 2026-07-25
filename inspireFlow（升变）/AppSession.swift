@@ -142,13 +142,13 @@ final class AppSession: ObservableObject {
             return true
         } catch let error as APIClientError {
             if case .server(let status, _, _) = error, status == 404 {
-                authErrorMessage = "platform.advx.uk 尚未启用在线演示账号，请部署 /api/v1/sessions/demo，或选择本地演示数据。"
+                authErrorMessage = "在线后端尚未启用演示账号，请部署 /api/v1/sessions/demo，或选择本地演示数据。"
             } else {
                 authErrorMessage = Self.message(for: error)
             }
             return false
         } catch {
-            authErrorMessage = "无法连接 platform.advx.uk，请稍后重试。"
+            authErrorMessage = "无法连接在线后端，请稍后重试。"
             return false
         }
     }

@@ -8,8 +8,8 @@ import Security
 /// Production traffic prefers HTTPS and falls back to the backend origin
 /// when the public domain is unavailable.
 enum BackendConfig {
-    static let baseURL = URL(string: "https://platform.advx.uk")!
-    static let fallbackBaseURLs = [URL(string: "http://116.62.42.177:8080")!]
+    static let baseURL = URL(string: "http://116.62.42.177:8080")!
+    static let fallbackBaseURLs: [URL] = []
     static let apiPrefix = "api/v1"
 }
 
@@ -201,7 +201,8 @@ actor APIClient {
         _ path: String,
         method: String = "GET",
         body: Data? = nil,
-        accessToken: String? = nil
+        accessToken: String? = nil,
+        idempotencyKey: String? = nil
     ) async throws -> Response {
         var lastTransportError: Error?
 
@@ -213,6 +214,9 @@ actor APIClient {
             }
             if let accessToken {
                 request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            }
+            if let idempotencyKey {
+                request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
             }
             request.httpBody = body
 
@@ -287,7 +291,8 @@ actor APIClient {
         mimeType: String,
         fileData: Data,
         formFields: [String: String] = [:],
-        accessToken: String? = nil
+        accessToken: String? = nil,
+        idempotencyKey: String? = nil
     ) async throws -> Response {
         let boundary = UUID().uuidString
 
@@ -310,6 +315,9 @@ actor APIClient {
             urlRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
             if let accessToken {
                 urlRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            if let idempotencyKey {
+                urlRequest.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+            }
             }
             urlRequest.httpBody = bodyData
 

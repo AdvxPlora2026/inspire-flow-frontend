@@ -16,22 +16,32 @@ final class AudioRecorder: NSObject, ObservableObject {
         guard granted else { throw AudioRecorderError.permissionDenied }
 
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.record, mode: .spokenAudio, options: [.allowBluetoothHFP])
-        try session.setActive(true)
+        do {
+            try session.setCategory(
+                .playAndRecord,
+                mode: .spokenAudio,
+                options: [.allowBluetoothHFP, .defaultToSpeaker]
+            )
+            try session.setActive(true)
 
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("inspireflow-").appendingPathExtension("m4a")
-        let settings: [String: Any] = [
-            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-            AVSampleRateKey: 44_100,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
-        ]
-        let recorder = try AVAudioRecorder(url: url, settings: settings)
-        recorder.prepareToRecord()
-        guard recorder.record() else { throw AudioRecorderError.couldNotStart }
-        self.recorder = recorder
-        recordingURL = url
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("inspireflow-\(UUID().uuidString)")
+                .appendingPathExtension("m4a")
+            let settings: [String: Any] = [
+                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                AVSampleRateKey: 44_100,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+            ]
+            let recorder = try AVAudioRecorder(url: url, settings: settings)
+            recorder.prepareToRecord()
+            guard recorder.record() else { throw AudioRecorderError.couldNotStart }
+            self.recorder = recorder
+            recordingURL = url
+        } catch {
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            throw error
+        }
     }
 
     @discardableResult

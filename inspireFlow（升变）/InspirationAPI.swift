@@ -104,7 +104,7 @@ enum InspirationAPI {
         let body = try BackendJSON.encoder.encode(
             InspirationCreateRequest(content: content, sourceType: sourceType, projectIDs: projectIDs)
         )
-        return try await APIClient.shared.send("inspirations", method: "POST", body: body, accessToken: accessToken)
+        return try await APIClient.shared.send("inspirations", method: "POST", body: body, accessToken: accessToken, idempotencyKey: UUID().uuidString)
     }
 
     static func list(
