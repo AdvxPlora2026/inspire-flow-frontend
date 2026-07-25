@@ -30,6 +30,10 @@ final class RingManager: ObservableObject {
     /// regardless of which screen presented it. Shared so a ring gesture never
     /// tries to present a second sheet on top of an already-open one.
     @Published var isCapturePresented = false
+    @Published private(set) var captureProjectID: UUID?
+
+    /// Prevents a ring gesture from competing with the device-management sheet.
+    @Published var isDeviceManagementPresented = false
 
     /// Double-click opens capture from anywhere in the creator workspace.
     let captureSignal = PassthroughSubject<Void, Never>()
@@ -45,6 +49,16 @@ final class RingManager: ObservableObject {
     var isConnected: Bool { state == .connected }
 
     var hasSavedRing: Bool { savedIdentifier != nil }
+
+    func presentCapture(projectID: UUID? = nil) {
+        guard !isCapturePresented, !isDeviceManagementPresented else { return }
+        captureProjectID = projectID
+        isCapturePresented = true
+    }
+
+    func clearCaptureContext() {
+        captureProjectID = nil
+    }
 
     private var savedIdentifier: UUID? {
         get { UserDefaults.standard.string(forKey: savedIdentifierKey).flatMap(UUID.init(uuidString:)) }

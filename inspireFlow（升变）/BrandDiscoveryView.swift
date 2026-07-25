@@ -6,7 +6,7 @@ struct BrandDiscoveryView: View {
 
     @State private var brands: [BrandPublicDTO] = []
     @State private var selectedBrand: BrandPublicDTO?
-    @State private var creators: [CreatorDiscoveryItemDTO] = []
+    @State private var creators: [WorkshopPublicDTO] = []
     @State private var isLoadingBrands = true
     @State private var isLoadingCreators = false
     @State private var errorMessage: String?
@@ -15,39 +15,67 @@ struct BrandDiscoveryView: View {
 
     var body: some View {
         NavigationStack {
-            ShengbianBackground {
-                if isLoadingBrands {
-                    loadingView
-                } else if brands.isEmpty {
-                    emptyBrandView
-                } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
-                            brandSelector
-                            if let selectedBrand {
-                                creatorDiscoverySection
+            if session.isDemoMode {
+                ShengbianBackground {
+                    demoModeView
+                }
+                .navigationTitle("品牌发现")
+                .navigationBarTitleDisplayMode(.inline)
+            } else {
+                ShengbianBackground {
+                    if isLoadingBrands {
+                        loadingView
+                    } else if let errorMessage {
+                        errorView(errorMessage)
+                    } else if brands.isEmpty {
+                        emptyBrandView
+                    } else {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 20) {
+                                brandSelector
+                                if let selectedBrand {
+                                    creatorDiscoverySection
+                                }
                             }
+                            .padding(.horizontal, ShengbianMetrics.pageMargin)
+                            .padding(.bottom, 40)
                         }
-                        .padding(.horizontal, ShengbianMetrics.pageMargin)
-                        .padding(.bottom, 40)
                     }
                 }
-            }
-            .navigationTitle("品牌发现")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { showNewBrandSheet = true }) {
-                        Image(systemName: "plus")
-                            .foregroundStyle(ShengbianColors.primaryText)
+                .navigationTitle("品牌发现")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(action: { showNewBrandSheet = true }) {
+                            Image(systemName: "plus")
+                                .foregroundStyle(ShengbianColors.primaryText)
+                        }
                     }
                 }
+                .sheet(isPresented: $showNewBrandSheet) {
+                    NewBrandSheet { await loadBrands() }
+                        .environmentObject(session)
+                }
+                .task { await loadBrands() }
             }
-            .sheet(isPresented: $showNewBrandSheet) {
-                NewBrandSheet { await loadBrands() }
-            }
-            .task { await loadBrands() }
         }
+    }
+
+    private var demoModeView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "binoculars.fill")
+                .font(.system(size: 48))
+                .foregroundStyle(ShengbianColors.secondaryText.opacity(0.5))
+            Text("品牌发现需要在线模式")
+                .font(ShengbianTypography.title3)
+                .foregroundStyle(ShengbianColors.primaryText)
+            Text("请切换到在线账号以使用品牌发现、创作者搜索和合作意向等功能")
+                .font(ShengbianTypography.body)
+                .foregroundStyle(ShengbianColors.secondaryText)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var loadingView: some View {
@@ -58,6 +86,31 @@ struct BrandDiscoveryView: View {
                 .foregroundStyle(ShengbianColors.secondaryText)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func errorView(_ message: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.icloud.fill")
+                .font(.system(size: 48))
+                .foregroundStyle(ShengbianColors.warning)
+            Text("加载失败")
+                .font(ShengbianTypography.title3)
+                .foregroundStyle(ShengbianColors.primaryText)
+            Text(message)
+                .font(ShengbianTypography.body)
+                .foregroundStyle(ShengbianColors.secondaryText)
+                .multilineTextAlignment(.center)
+            Button {
+                errorMessage = nil
+                Task { await loadBrands() }
+            } label: {
+                Label("重试", systemImage: "arrow.clockwise")
+                    .font(ShengbianTypography.headline)
+                    .foregroundStyle(ShengbianColors.primaryAction)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 32)
     }
 
     private var emptyBrandView: some View {
@@ -172,7 +225,9 @@ struct BrandDiscoveryView: View {
         }
     }
 
-    private func creatorCard(_ creator: CreatorDiscoveryItemDTO) -> some View {
+    @ViewBuilder
+    private func creatorCard(_ creator: WorkshopPublicDTO) -> some View {
+        let projectCount = creator.projects.count
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
@@ -186,8 +241,8 @@ struct BrandDiscoveryView: View {
                     }
                 }
                 Spacer()
-                if creator.isFollowed {
-                    Text("已关注")
+                if creator.publishedAt != nil {
+                    Text("已发布")
                         .font(ShengbianTypography.caption)
                         .foregroundStyle(ShengbianColors.success)
                         .padding(.horizontal, 8)
@@ -219,19 +274,17 @@ struct BrandDiscoveryView: View {
             }
 
             HStack {
-                Label("\(creator.publishedProjectCount) 个作品", systemImage: "folder.fill")
+                Label("\(projectCount) 个作品", systemImage: "folder.fill")
                     .font(ShengbianTypography.caption)
                     .foregroundStyle(ShengbianColors.secondaryText)
                 Spacer()
 
-                if !creator.isFollowed {
-                    Button {
-                        Task { await followCreator(creator.creatorID) }
-                    } label: {
-                        Label("关注", systemImage: "person.badge.plus")
-                            .font(ShengbianTypography.headline)
-                            .foregroundStyle(ShengbianColors.primaryAction)
-                    }
+                Button {
+                    Task { await followCreator(creator.creatorID) }
+                } label: {
+                    Label("关注", systemImage: "person.badge.plus")
+                        .font(ShengbianTypography.headline)
+                        .foregroundStyle(ShengbianColors.primaryAction)
                 }
 
                 Button {
@@ -257,8 +310,13 @@ struct BrandDiscoveryView: View {
     // MARK: - Actions
 
     private func loadBrands() async {
-        guard let token = session.accessToken else { return }
         isLoadingBrands = true
+        errorMessage = nil
+        guard let token = session.accessToken else {
+            isLoadingBrands = false
+            errorMessage = "请在登录后使用品牌发现功能"
+            return
+        }
         do {
             let page = try await BrandEngagementAPI.list(accessToken: token)
             brands = page.items
@@ -273,8 +331,11 @@ struct BrandDiscoveryView: View {
     }
 
     private func loadCreators(for brand: BrandPublicDTO) async {
-        guard let token = session.accessToken else { return }
         isLoadingCreators = true
+        guard let token = session.accessToken else {
+            isLoadingCreators = false
+            return
+        }
         do {
             let page = try await BrandEngagementAPI.discoverCreators(
                 brand.id,
@@ -283,13 +344,16 @@ struct BrandDiscoveryView: View {
             )
             creators = page.items
         } catch {
-            // Silently fail for discovery errors
+            errorMessage = error.localizedDescription
         }
         isLoadingCreators = false
     }
 
     private func followCreator(_ creatorID: UUID) async {
-        guard let token = session.accessToken, let brand = selectedBrand else { return }
+        guard let token = session.accessToken, let brand = selectedBrand else {
+            Haptics.error()
+            return
+        }
         do {
             try await BrandEngagementAPI.follow(brand.id, creatorID: creatorID, accessToken: token)
             Haptics.impact(.medium)
@@ -300,7 +364,10 @@ struct BrandDiscoveryView: View {
     }
 
     private func showInterest(_ creatorID: UUID) async {
-        guard let token = session.accessToken, let brand = selectedBrand else { return }
+        guard let token = session.accessToken, let brand = selectedBrand else {
+            Haptics.error()
+            return
+        }
         do {
             _ = try await BrandEngagementAPI.createInterest(
                 brand.id,
@@ -324,12 +391,24 @@ private struct NewBrandSheet: View {
     @State private var description = ""
     @State private var websiteURL = ""
     @State private var isLoading = false
+    @State private var errorMessage: String?
 
     let onCreated: () async -> Void
 
     var body: some View {
         NavigationStack {
             Form {
+                if let errorMessage {
+                    Section {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text(errorMessage)
+                                .font(.callout)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                }
                 Section("品牌信息") {
                     TextField("品牌名称", text: $name)
                     TextField("简介（可选）", text: $description, axis: .vertical)
@@ -358,20 +437,26 @@ private struct NewBrandSheet: View {
     }
 
     private func create() async {
-        guard let token = session.accessToken else { return }
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard let token = session.accessToken else {
+            errorMessage = "登录状态不可用，请退出后重新登录。"
+            Haptics.error()
+            return
+        }
         isLoading = true
+        errorMessage = nil
         do {
             _ = try await BrandEngagementAPI.create(
-                name: name,
-                description: description.isEmpty ? nil : description,
-                websiteURL: websiteURL.isEmpty ? nil : websiteURL,
+                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                description: description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : description,
+                websiteURL: websiteURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : websiteURL,
                 accessToken: token
             )
-            await MainActor.run {
-                dismiss()
-                Task { await onCreated() }
-            }
+            Haptics.success()
+            dismiss()
+            await onCreated()
         } catch {
+            errorMessage = error.localizedDescription
             Haptics.error()
         }
         isLoading = false

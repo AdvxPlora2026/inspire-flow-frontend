@@ -1,22 +1,45 @@
 import SwiftUI
+import CryptoKit
 
 struct CommercialTaskView: View {
+    @EnvironmentObject private var appStore: AppStore
     @EnvironmentObject private var session: AppSession
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let projectID: UUID
     let projectName: String
+    let existingTaskID: UUID?
 
     @State private var task: CommercialTaskPublicDTO?
     @State private var proof: CommercialTaskProofDTO?
     @State private var isLoading = true
     @State private var errorMessage: String?
 
+    // Create-task form state
+    @State private var showCreateForm = false
+    @State private var taskTitle = ""
+    @State private var taskAmount = ""
+    @State private var taskDenom = "INJ"
+    @State private var taskDeadline = Date().addingTimeInterval(7 * 24 * 3600)
+    @State private var isCreating = false
+
+    // Submit-work form state
+    @State private var showSubmitForm = false
+    @State private var deliveryURL = ""
+    @State private var isSubmitting = false
+    @State private var submitErrorMessage: String?
+
+    private var resolvedTaskID: UUID? {
+        existingTaskID ?? task?.id
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             sectionHeader
 
-            if isLoading {
+            if existingTaskID == nil && task == nil && !isLoading {
+                noTaskView
+            } else if isLoading {
                 loadingState
             } else if let errorMessage {
                 errorState(errorMessage)
@@ -28,7 +51,13 @@ struct CommercialTaskView: View {
                 }
             }
         }
-        .task { await loadTask() }
+        .task {
+            if existingTaskID != nil {
+                await loadTask()
+            } else {
+                isLoading = false
+            }
+        }
     }
 
     private var sectionHeader: some View {
@@ -189,12 +218,99 @@ struct CommercialTaskView: View {
     }
 
     private func submitWorkButton(_ task: CommercialTaskPublicDTO) -> some View {
-        // In real flow, this would show a form to collect artifact details
-        Text("提交作品（需实现提交表单）")
-            .font(ShengbianTypography.caption)
-            .foregroundStyle(ShengbianColors.secondaryText)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+        VStack(spacing: 10) {
+            if showSubmitForm {
+                submitWorkForm(task)
+            } else {
+                Button {
+                    withAnimation(.easeOut(duration: 0.2)) { showSubmitForm = true }
+                } label: {
+                    Label("提交作品", systemImage: "square.and.arrow.up.fill")
+                        .font(ShengbianTypography.headline)
+                        .foregroundStyle(ShengbianColors.inverseText)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            ShengbianColors.primaryAction,
+                            in: RoundedRectangle(cornerRadius: ShengbianMetrics.controlRadius, style: .continuous)
+                        )
+                }
+                .shengbianPressable(reduceMotion: reduceMotion)
+            }
+        }
+    }
+
+    private func submitWorkForm(_ task: CommercialTaskPublicDTO) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let submitErrorMessage {
+                Text(submitErrorMessage)
+                    .font(ShengbianTypography.caption)
+                    .foregroundStyle(ShengbianColors.warning)
+            }
+
+            TextField("作品交付链接（URL）", text: $deliveryURL)
+                .font(ShengbianTypography.body)
+                .foregroundStyle(ShengbianColors.primaryText)
+                .keyboardType(.URL)
+                .padding(10)
+                .background(ShengbianColors.glassTint, in: RoundedRectangle(cornerRadius: 8))
+
+            HStack(spacing: 10) {
+                Button("取消") {
+                    withAnimation(.easeOut(duration: 0.2)) { showSubmitForm = false }
+                }
+                .font(ShengbianTypography.headline)
+                .foregroundStyle(ShengbianColors.secondaryText)
+
+                Button {
+                    Task { await doSubmit(task) }
+                } label: {
+                    if isSubmitting {
+                        ProgressView().tint(ShengbianColors.inverseText)
+                    } else {
+                        Text("确认提交")
+                            .font(ShengbianTypography.headline)
+                    }
+                }
+                .foregroundStyle(ShengbianColors.inverseText)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(
+                    deliveryURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting
+                        ? ShengbianColors.glassTint
+                        : ShengbianColors.primaryAction,
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                )
+                .disabled(deliveryURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting)
+            }
+        }
+    }
+
+    private func doSubmit(_ task: CommercialTaskPublicDTO) async {
+        let url = deliveryURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let token = session.accessToken, !url.isEmpty else { return }
+        isSubmitting = true
+        submitErrorMessage = nil
+        do {
+            // Generate artifact ID and SHA-256 from the delivery URL
+            let artifactID = UUID()
+            let sha256 = url.sha256()
+            _ = try await CommercialTaskAPI.submit(
+                taskID: task.id,
+                artifactID: artifactID,
+                artifactSHA256: sha256,
+                deliveryURL: url,
+                accessToken: token
+            )
+            Haptics.success()
+            showSubmitForm = false
+            deliveryURL = ""
+            await loadTask()
+        } catch {
+            submitErrorMessage = error.localizedDescription
+            Haptics.error()
+        }
+        isSubmitting = false
     }
 
     private func authorizeButton(_ task: CommercialTaskPublicDTO) -> some View {
@@ -293,8 +409,8 @@ struct CommercialTaskView: View {
                     .foregroundStyle(ShengbianColors.listening)
                     .lineLimit(1)
             }
-            if let url = tx.explorerURL {
-                Link("在浏览器查看", destination: URL(string: url)!)
+            if let urlStr = tx.explorerURL, let validURL = URL(string: urlStr) {
+                Link("在浏览器查看", destination: validURL)
                     .font(ShengbianTypography.caption)
                     .foregroundStyle(ShengbianColors.primaryAction)
             }
@@ -305,7 +421,125 @@ struct CommercialTaskView: View {
 
     // MARK: - Actions
 
+    private var noTaskView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "bitcoinsign.circle")
+                .font(.system(size: 36))
+                .foregroundStyle(ShengbianColors.secondaryText.opacity(0.5))
+
+            if session.role == .client {
+                // Brand side: create task button
+                Text("尚未创建链上任务")
+                    .font(ShengbianTypography.headline)
+                    .foregroundStyle(ShengbianColors.primaryText)
+                Text("创建 Injective 链上任务后，可以追踪资金托管、作品提交和结算状态")
+                    .font(ShengbianTypography.caption)
+                    .foregroundStyle(ShengbianColors.secondaryText)
+                    .multilineTextAlignment(.center)
+
+                if showCreateForm {
+                    createTaskForm
+                } else {
+                    Button {
+                        withAnimation(.easeOut(duration: 0.2)) { showCreateForm = true }
+                    } label: {
+                        Label("创建链上任务", systemImage: "plus.circle.fill")
+                            .font(ShengbianTypography.headline)
+                            .foregroundStyle(ShengbianColors.inverseText)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 10)
+                            .background(
+                                ShengbianColors.primaryAction,
+                                in: RoundedRectangle(cornerRadius: ShengbianMetrics.controlRadius, style: .continuous)
+                            )
+                    }
+                    .shengbianPressable(reduceMotion: reduceMotion)
+                }
+            } else {
+                // Creator side: waiting for brand
+                Text("等待品牌方创建链上任务")
+                    .font(ShengbianTypography.headline)
+                    .foregroundStyle(ShengbianColors.primaryText)
+                Text("品牌方创建 Injective 链上任务后，你可以在这里提交作品和释放结算")
+                    .font(ShengbianTypography.caption)
+                    .foregroundStyle(ShengbianColors.secondaryText)
+                    .multilineTextAlignment(.center)
+
+                Label("当前角色：创作者", systemImage: "person.fill")
+                    .font(ShengbianTypography.caption)
+                    .foregroundStyle(ShengbianColors.listening)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(ShengbianColors.listening.opacity(0.1), in: Capsule())
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .background(
+            ShengbianColors.glassTintStrong,
+            in: RoundedRectangle(cornerRadius: ShengbianMetrics.cardRadius, style: .continuous)
+        )
+    }
+
+    private var createTaskForm: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TextField("任务标题", text: $taskTitle)
+                .font(ShengbianTypography.body)
+                .foregroundStyle(ShengbianColors.primaryText)
+                .padding(10)
+                .background(ShengbianColors.glassTint, in: RoundedRectangle(cornerRadius: 8))
+
+            HStack(spacing: 8) {
+                TextField("金额", text: $taskAmount)
+                    .keyboardType(.decimalPad)
+                TextField("币种", text: $taskDenom)
+            }
+            .font(ShengbianTypography.body)
+            .foregroundStyle(ShengbianColors.primaryText)
+            .padding(10)
+            .background(ShengbianColors.glassTint, in: RoundedRectangle(cornerRadius: 8))
+
+            DatePicker("截止日期", selection: $taskDeadline, displayedComponents: .date)
+                .font(ShengbianTypography.body)
+                .foregroundStyle(ShengbianColors.primaryText)
+                .colorScheme(.dark)
+
+            HStack(spacing: 10) {
+                Button("取消") {
+                    withAnimation(.easeOut(duration: 0.2)) { showCreateForm = false }
+                }
+                .font(ShengbianTypography.headline)
+                .foregroundStyle(ShengbianColors.secondaryText)
+
+                Button {
+                    Task { await doCreate() }
+                } label: {
+                    if isCreating {
+                        ProgressView().tint(ShengbianColors.inverseText)
+                    } else {
+                        Text("确认创建")
+                            .font(ShengbianTypography.headline)
+                    }
+                }
+                .foregroundStyle(ShengbianColors.inverseText)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(
+                    taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || taskAmount.isEmpty
+                        ? ShengbianColors.glassTint
+                        : ShengbianColors.primaryAction,
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                )
+                .disabled(taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || taskAmount.isEmpty || isCreating)
+            }
+        }
+    }
+
     private func loadTask() async {
+        guard let taskID = resolvedTaskID else {
+            isLoading = false
+            return
+        }
         isLoading = true
         errorMessage = nil
         guard let token = session.accessToken else {
@@ -314,7 +548,7 @@ struct CommercialTaskView: View {
             return
         }
         do {
-            let result = try await CommercialTaskAPI.proof(taskID: projectID, accessToken: token)
+            let result = try await CommercialTaskAPI.proof(taskID: taskID, accessToken: token)
             task = result.task
             proof = result
         } catch {
@@ -323,25 +557,69 @@ struct CommercialTaskView: View {
         isLoading = false
     }
 
+    private func doCreate() async {
+        guard let token = session.accessToken, !taskAmount.isEmpty else { return }
+        isCreating = true
+        do {
+            let newTask = try await CommercialTaskAPI.create(
+                projectID: projectID,
+                title: taskTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+                budget: BudgetDTO(amount: taskAmount, denom: taskDenom),
+                deadline: taskDeadline,
+                splits: [CommercialTaskSplitDTO(partyID: "creator", bps: 10000)],
+                accessToken: token
+            )
+            // Store task ID back to the project
+            appStore.setCommercialTaskID(for: projectID, taskID: newTask.id)
+            task = newTask
+            showCreateForm = false
+            Haptics.success()
+            // Now load proof with the correct task ID
+            await loadTask()
+        } catch {
+            errorMessage = error.localizedDescription
+            Haptics.error()
+        }
+        isCreating = false
+    }
+
     private func doAuthorize(_ taskID: UUID) async {
-        guard let token = session.accessToken else { return }
+        guard let token = session.accessToken else {
+            errorMessage = "请先登录"
+            return
+        }
         do {
             _ = try await CommercialTaskAPI.authorize(taskID: taskID, accessToken: token)
+            errorMessage = nil
             Haptics.success()
             await loadTask()
         } catch {
+            errorMessage = error.localizedDescription
             Haptics.error()
         }
     }
 
     private func doSettle(_ taskID: UUID) async {
-        guard let token = session.accessToken else { return }
+        guard let token = session.accessToken else {
+            errorMessage = "请先登录"
+            return
+        }
         do {
             _ = try await CommercialTaskAPI.settle(taskID: taskID, accessToken: token)
+            errorMessage = nil
             Haptics.success()
             await loadTask()
         } catch {
+            errorMessage = error.localizedDescription
             Haptics.error()
         }
+    }
+}
+
+private extension String {
+    func sha256() -> String {
+        let data = Data(self.utf8)
+        let hash = SHA256.hash(data: data)
+        return hash.map { String(format: "%02x", $0) }.joined()
     }
 }

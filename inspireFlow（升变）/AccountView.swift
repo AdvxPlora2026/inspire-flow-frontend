@@ -11,6 +11,7 @@ struct AccountView: View {
     @State private var isShowingGuide = false
     @State private var guideCompletion = false
     @State private var isConfirmingReset = false
+    @State private var isConfirmingSeed = false
 
     var body: some View {
         AppBackground {
@@ -44,18 +45,23 @@ struct AccountView: View {
                         } label: {
                             Label("创作主页与品牌授权", systemImage: "megaphone.fill")
                         }
+                        .disabled(session.isDemoMode)
                     }
 
-                    if session.isDemoMode {
-                        Button {
-                            session.switchRole()
-                        } label: {
-                            Label("切换为\(session.role == .creator ? "品牌方" : "创作者")", systemImage: "arrow.triangle.2.circlepath")
-                        }
+                    Button {
+                        session.switchRole()
+                    } label: {
+                        Label(
+                            session.role == .creator ? "切换为品牌方视角" : "切换为创作者视角",
+                            systemImage: "arrow.triangle.2.circlepath"
+                        )
                     }
 
-                    Label(session.isDemoMode ? "演示模式 — 数据仅保存在本机" : "本机缓存已启用", systemImage: session.isDemoMode ? "exclamationmark.shield" : "internaldrive")
-                        .foregroundStyle(session.isDemoMode ? .orange : .secondary)
+                    Label(
+                        session.isDemoMode ? "演示模式 — 数据仅保存在本机" : "在线模式 — 数据已同步到云端",
+                        systemImage: session.isDemoMode ? "exclamationmark.shield" : "icloud.fill"
+                    )
+                    .foregroundStyle(session.isDemoMode ? .orange : ShengbianColors.success)
                 }
 
                 Section {
@@ -106,6 +112,12 @@ struct AccountView: View {
                         Label("重新查看产品引导", systemImage: "questionmark.circle")
                     }
 
+                    Button {
+                        isConfirmingSeed = true
+                    } label: {
+                        Label("注入演示数据（多场景展示）", systemImage: "square.and.arrow.down.on.square.fill")
+                    }
+
                     if session.isDemoMode {
                         Button(role: .destructive) {
                             isConfirmingReset = true
@@ -131,6 +143,11 @@ struct AccountView: View {
             Button("重置", role: .destructive) { appStore.resetDemoData() }
         } message: {
             Text("将恢复默认的演示灵感和项目，不会退出登录或清除账号信息。")
+        }
+        .confirmationDialog("注入演示数据？", isPresented: $isConfirmingSeed, titleVisibility: .visible) {
+            Button("注入（替换现有数据）", role: .destructive) { appStore.seedRichDemoData() }
+        } message: {
+            Text("将用 5 个项目、10 条灵感、完整 PAWN 对话和商业链上履约数据替换当前数据。此操作不可撤销，建议先截图当前布局。")
         }
         .sheet(isPresented: $isEditingCreatorProfile) {
             CreatorProfileSetupView(mode: .editing)

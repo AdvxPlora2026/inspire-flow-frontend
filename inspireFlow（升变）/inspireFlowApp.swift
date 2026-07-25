@@ -12,6 +12,8 @@ struct inspireFlowApp: App {
     @StateObject private var appStore = AppStore()
     @StateObject private var session = AppSession()
     @StateObject private var ringManager = RingManager()
+    @StateObject private var headsetManager = ViaimHeadsetManager()
+    @StateObject private var speechOutput = SpeechOutputService()
 
     @AppStorage("hasCompletedOnboarding")
     private var hasCompletedOnboarding = false
@@ -22,7 +24,10 @@ struct inspireFlowApp: App {
             .environmentObject(appStore)
             .environmentObject(session)
             .environmentObject(ringManager)
+            .environmentObject(headsetManager)
+            .environmentObject(speechOutput)
             .task {
+                headsetManager.configure()
                 if ringManager.hasSavedRing {
                     ringManager.reconnectSaved()
                 }

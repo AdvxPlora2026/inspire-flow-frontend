@@ -8,7 +8,10 @@ import Security
 /// Production traffic prefers HTTPS and falls back to the backend origin
 /// when the public domain is unavailable.
 enum BackendConfig {
-    static let baseURL = URL(string: "http://116.62.42.177:8080")!
+    static let baseURL: URL = {
+        URL(string: "http://116.62.42.177:8080")
+            ?? URL(string: "http://localhost:8080")!
+    }()
     static let fallbackBaseURLs: [URL] = []
     static let apiPrefix = "api/v1"
 }
@@ -196,6 +199,17 @@ actor APIClient {
         response.statusCode == 403 && response.mimeType == "text/html"
     }
 
+    private func resolvedIdempotencyKey(
+        method: String,
+        accessToken: String?,
+        providedKey: String?
+    ) -> String? {
+        guard accessToken != nil, ["POST", "PUT", "PATCH", "DELETE"].contains(method.uppercased()) else {
+            return providedKey
+        }
+        return providedKey ?? UUID().uuidString
+    }
+
     /// Sends a request and decodes a JSON response body.
     func send<Response: Decodable>(
         _ path: String,
@@ -205,6 +219,11 @@ actor APIClient {
         idempotencyKey: String? = nil
     ) async throws -> Response {
         var lastTransportError: Error?
+        let requestIdempotencyKey = resolvedIdempotencyKey(
+            method: method,
+            accessToken: accessToken,
+            providedKey: idempotencyKey
+        )
 
         for (index, baseURL) in baseURLs.enumerated() {
             var request = URLRequest(url: endpointURL(for: path, baseURL: baseURL))
@@ -215,8 +234,8 @@ actor APIClient {
             if let accessToken {
                 request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
             }
-            if let idempotencyKey {
-                request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+            if let requestIdempotencyKey {
+                request.setValue(requestIdempotencyKey, forHTTPHeaderField: "Idempotency-Key")
             }
             request.httpBody = body
 
@@ -262,8 +281,12 @@ actor APIClient {
         }
 
         if Response.self == EmptyResponse.self {
-            // 204/empty-body success responses have nothing to decode.
-            return EmptyResponse() as! Response // swiftlint:disable:this force_cast
+            guard let empty = EmptyResponse() as? Response else {
+                throw APIClientError.decoding(
+                    DecodingError.typeMismatch(Response.self, .init(codingPath: [], debugDescription: "Cannot cast EmptyResponse"))
+                )
+            }
+            return empty
         }
 
         if data.isEmpty {
@@ -295,6 +318,11 @@ actor APIClient {
         idempotencyKey: String? = nil
     ) async throws -> Response {
         let boundary = UUID().uuidString
+        let requestIdempotencyKey = resolvedIdempotencyKey(
+            method: "POST",
+            accessToken: accessToken,
+            providedKey: idempotencyKey
+        )
 
         var bodyData = Data()
         for (key, value) in formFields {
@@ -315,9 +343,9 @@ actor APIClient {
             urlRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
             if let accessToken {
                 urlRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-            if let idempotencyKey {
-                urlRequest.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
             }
+            if let requestIdempotencyKey {
+                urlRequest.setValue(requestIdempotencyKey, forHTTPHeaderField: "Idempotency-Key")
             }
             urlRequest.httpBody = bodyData
 

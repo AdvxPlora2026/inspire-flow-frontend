@@ -25,15 +25,16 @@ struct CreatorMainView: View {
         .tint(.white)
         .preferredColorScheme(.dark)
         .sensoryFeedback(.selection, trigger: selectedTab)
-        .sheet(isPresented: $ring.isCapturePresented) {
-            InspirationRecordView()
+        .sheet(isPresented: $ring.isCapturePresented, onDismiss: {
+            ring.clearCaptureContext()
+        }) {
+            InspirationRecordView(projectID: ring.captureProjectID)
         }
         .onReceive(ring.captureSignal) {
             // Lets a ring double-press/double-tap open capture from any tab,
             // not just while InspirationRecordView is already on screen.
-            guard !ring.isCapturePresented else { return }
             Haptics.impact(.medium)
-            ring.isCapturePresented = true
+            ring.presentCapture()
         }
     }
 

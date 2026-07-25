@@ -68,7 +68,7 @@ struct ProjectDetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if project.kind == .commercial && !session.isDemoMode {
-                CommercialTaskView(projectID: project.id, projectName: project.name)
+                CommercialTaskView(projectID: project.id, projectName: project.name, existingTaskID: project.commercialTaskID)
             } else if project.stage != .settled {
                 Button {
                     advanceStage(project)
@@ -346,7 +346,7 @@ struct ProjectDetailView: View {
                             .foregroundStyle(ShengbianColors.secondaryText)
 
                         Button {
-                            ring.isCapturePresented = true
+                            ring.presentCapture(projectID: project.id)
                         } label: {
                             Label("现在捕捉", systemImage: "mic.fill")
                                 .font(ShengbianTypography.caption)
@@ -360,9 +360,6 @@ struct ProjectDetailView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                }
-                .sheet(isPresented: $ring.isCapturePresented) {
-                    InspirationRecordView(projectID: project.id)
                 }
             } else {
                 ForEach(linkedInspirations.prefix(3)) { inspiration in

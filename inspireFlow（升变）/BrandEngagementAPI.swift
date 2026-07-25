@@ -191,32 +191,12 @@ private struct BrandMemberUpdateRequest: Encodable {
 
 // MARK: - Creator Discovery
 
+/// The backend returns `WorkshopPublic` items in the discovery page.
 struct CreatorDiscoveryPageDTO: Codable {
-    let items: [CreatorDiscoveryItemDTO]
+    let items: [WorkshopPublicDTO]
     let total: Int
     let limit: Int
     let offset: Int
-}
-
-struct CreatorDiscoveryItemDTO: Codable {
-    let creatorID: UUID
-    let nickname: String
-    let avatarURL: String?
-    let title: String?
-    let bio: String?
-    let contentFocus: [String]?
-    let publishedProjectCount: Int
-    let isFollowed: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case creatorID = "creator_id"
-        case nickname
-        case avatarURL = "avatar_url"
-        case title, bio
-        case contentFocus = "content_focus"
-        case publishedProjectCount = "published_project_count"
-        case isFollowed = "is_followed"
-    }
 }
 
 // MARK: - Creator Inbox
@@ -386,7 +366,7 @@ enum BrandEngagementAPI {
         accessToken: String,
         query: String? = nil,
         contentFocus: [String]? = nil,
-        sortBy: String = "published_project_count",
+        sortBy: String = "updated_at",
         sortOrder: String = "desc",
         limit: Int = 50,
         offset: Int = 0

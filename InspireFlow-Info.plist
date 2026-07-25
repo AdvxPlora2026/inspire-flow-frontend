@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>用于连接 Zilo 戒指和 viaim 智能耳机，实现免触屏灵感捕捉。</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>用于连接 Zilo 戒指和 viaim 智能耳机。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>用于录制灵感语音，PAWN 会将其转写为文字并追问细节。</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

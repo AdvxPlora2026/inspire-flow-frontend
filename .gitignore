@@ -61,6 +61,7 @@ coverage/
 Secrets.swift
 Config.local.swift
 GoogleService-Info.local.plist
+ViaimCredentials.swift
 
 # API keys and signing files
 *.p8

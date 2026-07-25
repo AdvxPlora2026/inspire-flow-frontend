@@ -33,10 +33,9 @@ struct CreatorHomeView: View {
         .navigationDestination(isPresented: $isCreatingProject) {
             NewProjectView()
         }
-        .sheet(isPresented: $ring.isCapturePresented) {
-            InspirationRecordView()
-        }
-        .sheet(item: $selectedTool) { tool in
+        .sheet(item: $selectedTool, onDismiss: {
+            ring.isDeviceManagementPresented = false
+        }) { tool in
             switch tool {
             case .teleprompter:
                 TeleprompterView()
@@ -51,6 +50,8 @@ struct CreatorHomeView: View {
     private var ringConnectionAction: some View {
         Button {
             Haptics.impact(.light)
+            guard !ring.isCapturePresented else { return }
+            ring.isDeviceManagementPresented = true
             selectedTool = .device
         } label: {
             HStack(spacing: 12) {
@@ -119,7 +120,7 @@ struct CreatorHomeView: View {
     private var captureAction: some View {
         Button {
             Haptics.impact(.medium)
-            ring.isCapturePresented = true
+            ring.presentCapture()
         } label: {
             VStack(spacing: 20) {
                 CaptureSignalMark()

@@ -4,6 +4,8 @@ struct InspirationRecordView: View {
     @EnvironmentObject private var appStore: AppStore
     @EnvironmentObject private var session: AppSession
     @EnvironmentObject private var ring: RingManager
+    @EnvironmentObject private var headset: ViaimHeadsetManager
+    @EnvironmentObject private var speechOutput: SpeechOutputService
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var audioRecorder = AudioRecorder()
@@ -29,6 +31,9 @@ struct InspirationRecordView: View {
     @State private var pulse = false
     @State private var recordedAudioURL: URL?
     @State private var processingError: String?
+    @State private var isSTTUnavailable = false
+    @State private var viaimSession: ViaimCaptureSession?
+    @State private var viaimPartial = ""
 
     private let demoAnswers = [
         "第一次尝试无屏创作的 B 站创作者",
@@ -81,8 +86,14 @@ struct InspirationRecordView: View {
         .onDisappear {
             stopTimer()
             audioRecorder.discard()
+            viaimSession?.cancel()
+            viaimSession = nil
         }
         .onReceive(ring.primaryActionSignal) { handleCaptureToggle() }
+        .onReceive(headset.transcriptReady) { text in
+            guard viaimSession != nil, !text.isEmpty else { return }
+            handleViaimTranscript(text)
+        }
     }
 
     private var sectionTransition: AnyTransition {
@@ -192,17 +203,44 @@ struct InspirationRecordView: View {
                         .foregroundStyle(ShengbianColors.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Button("重试转录") {
-                    Task { await transcribeRecording() }
+                HStack(spacing: 12) {
+                    Button("重试转录") {
+                        Task { await transcribeRecording() }
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    if isSTTUnavailable {
+                        Button("改用模拟转写继续") {
+                            Task { await useSimulatedTranscription() }
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(ShengbianColors.listening)
+                    }
+
+                    Button("重新录制") {
+                        audioRecorder.discard()
+                        recordedAudioURL = nil
+                        self.processingError = nil
+                        isSTTUnavailable = false
+                        viaimSession?.cancel()
+                        viaimSession = nil
+                        viaimPartial = ""
+                        phase = .ready
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.borderedProminent)
-                Button("重新录制") {
-                    audioRecorder.discard()
-                    recordedAudioURL = nil
-                    self.processingError = nil
-                    phase = .ready
+            } else if viaimSession != nil || (viaimPartial.isEmpty && transcription.isEmpty && headset.textStreamRunning) {
+                // Waiting for viaim final text.
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(.white)
+                    Text("正在等待 viaim 最终文本…")
+                        .font(ShengbianTypography.headline)
+                    Text(viaimPartial.isEmpty ? "耳机文本流处理中。" : "已收到部分文本，等待确认。")
+                        .shengbianBodyText(secondary: true)
                 }
-                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 ProgressView()
                     .controlSize(.large)
@@ -239,6 +277,13 @@ struct InspirationRecordView: View {
                         .font(ShengbianTypography.caption)
                         .foregroundStyle(ShengbianColors.tertiaryText)
                 }
+            }
+            .onAppear {
+                guard !session.isDemoMode, headset.isAvailable else { return }
+                speechOutput.speak(questions[questionIndex])
+            }
+            .onDisappear {
+                speechOutput.stop()
             }
 
             if session.isDemoMode {
@@ -586,6 +631,31 @@ struct InspirationRecordView: View {
     private func startRecording() async {
         processingError = nil
         transcription = ""
+        viaimPartial = ""
+
+        // Prefer viaim headset when connected.
+        if headset.isAvailable, !session.isDemoMode {
+            let session = ViaimCaptureSession(headset: headset)
+            viaimSession = session
+            session.start()
+            Haptics.impact(.medium)
+            withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.84)) {
+                phase = .recording
+            }
+            pulse = true
+            elapsed = 0
+            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+                Task { @MainActor in
+                    elapsed += 1
+                    // Mirror viaim partial text into the display.
+                    if let s = self.viaimSession {
+                        self.viaimPartial = s.livePartial
+                    }
+                }
+            }
+            return
+        }
+
         if !session.isDemoMode {
             guard session.accessToken != nil else {
                 processingError = "登录状态不可用，请退出后重新登录。"
@@ -620,6 +690,17 @@ struct InspirationRecordView: View {
         stopTimer()
         pulse = false
         Haptics.impact(.rigid)
+
+        if let session = viaimSession {
+            session.stop()
+            // Final text will arrive via headset.transcriptReady → handleViaimTranscript.
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+                phase = .transcribing
+            }
+            return
+        }
+
+        viaimSession = nil
         if session.isDemoMode {
             withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
                 phase = .questioning
@@ -635,40 +716,92 @@ struct InspirationRecordView: View {
         }
     }
 
-    private func transcribeRecording() async {
-        guard let accessToken = session.accessToken else {
-            processingError = "登录状态不可用，请退出后重新登录。"
+    /// Called when the viaim text stream delivers a final transcript.
+    private func handleViaimTranscript(_ text: String) {
+        transcription = text
+        viaimSession?.cancel()
+        viaimSession = nil
+        viaimPartial = ""
+
+        guard !text.isEmpty else {
+            processingError = "viaim 未返回有效文本，请重试。"
             return
         }
+
+        if let accessToken = session.accessToken {
+            Task {
+                do {
+                    try await beginPawnFlow(transcription: text, accessToken: accessToken)
+                } catch {
+                    processingError = error.localizedDescription
+                    Haptics.error()
+                }
+            }
+        } else {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                phase = .questioning
+                questionIndex = 0
+                answers = []
+            }
+        }
+    }
+
+    private func transcribeRecording() async {
         guard let recordedAudioURL else {
             processingError = "没有找到录音文件，请重新录制。"
             return
         }
 
         processingError = nil
+        isSTTUnavailable = false
         do {
             let audioData = try Data(contentsOf: recordedAudioURL)
-            var job = try await TranscriptionAPI.submit(
-                accessToken: accessToken,
-                fileData: audioData,
-                fileName: recordedAudioURL.lastPathComponent,
+
+            // 直连 Replicate Whisper，不依赖后端 STT
+            let text = try await DirectWhisperClient.shared.transcribe(
+                audioData: audioData,
                 mimeType: "audio/mp4"
             )
-            for _ in 0..<90 where !job.isTerminal {
-                try await Task.sleep(for: .seconds(1))
-                job = try await TranscriptionAPI.status(jobID: job.id, accessToken: accessToken)
-            }
-            guard job.isTerminal else { throw TranscriptionFlowError.timedOut }
-            guard job.isSuccess, let text = job.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
-                throw TranscriptionFlowError.failed(job.error?.message ?? "语音服务未返回文字。")
-            }
             transcription = text
             audioRecorder.discard()
             self.recordedAudioURL = nil
-            try await beginPawnFlow(transcription: text, accessToken: accessToken)
+
+            if let accessToken = session.accessToken {
+                try await beginPawnFlow(transcription: text, accessToken: accessToken)
+            } else {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                    phase = .questioning
+                    questionIndex = 0
+                    answers = []
+                }
+            }
         } catch {
-            processingError = error.localizedDescription
+            processingError = "转写失败：\(error.localizedDescription)\n请重试，或使用模拟转写继续。"
+            isSTTUnavailable = true
             Haptics.error()
+        }
+    }
+
+    /// Fall back to simulated transcription when STT keeps failing.
+    private func useSimulatedTranscription() async {
+        processingError = nil
+        isSTTUnavailable = false
+        transcription = "我想做一期关于随手用语音捕捉灵感、再由 PAWN 完成 B 站创作方案的视频。"
+        audioRecorder.discard()
+        recordedAudioURL = nil
+        if let accessToken = session.accessToken {
+            do {
+                try await beginPawnFlow(transcription: transcription, accessToken: accessToken)
+            } catch {
+                processingError = error.localizedDescription
+                Haptics.error()
+            }
+        } else {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                phase = .questioning
+                questionIndex = 0
+                answers = []
+            }
         }
     }
 

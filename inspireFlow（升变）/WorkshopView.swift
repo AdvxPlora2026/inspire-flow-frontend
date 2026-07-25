@@ -15,42 +15,67 @@ struct WorkshopView: View {
 
     var body: some View {
         NavigationStack {
-            ShengbianBackground {
-                if isLoading {
-                    loadingView
-                } else if let workshop {
-                    workshopContent(workshop)
-                } else if let errorMessage {
-                    errorView(errorMessage)
+            if session.isDemoMode {
+                ShengbianBackground {
+                    workshopDemoView
                 }
-            }
-            .navigationTitle("创作主页")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    if workshop != nil {
-                        HStack(spacing: 12) {
-                            if workshop?.publishedAt == nil {
-                                publishButton
-                            } else {
-                                Button("撤回") { Task { await withdraw() } }
+                .navigationTitle("创作主页")
+                .navigationBarTitleDisplayMode(.inline)
+            } else {
+                ShengbianBackground {
+                    if isLoading {
+                        loadingView
+                    } else if let workshop {
+                        workshopContent(workshop)
+                    } else if let errorMessage {
+                        errorView(errorMessage)
+                    }
+                }
+                .navigationTitle("创作主页")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        if workshop != nil {
+                            HStack(spacing: 12) {
+                                if workshop?.publishedAt == nil {
+                                    publishButton
+                                } else {
+                                    Button("撤回") { Task { await withdraw() } }
+                                        .font(ShengbianTypography.caption)
+                                        .foregroundStyle(ShengbianColors.warning)
+                                }
+                                Button("编辑") { showEditSheet = true }
                                     .font(ShengbianTypography.caption)
-                                    .foregroundStyle(ShengbianColors.warning)
+                                    .foregroundStyle(ShengbianColors.primaryAction)
                             }
-                            Button("编辑") { showEditSheet = true }
-                                .font(ShengbianTypography.caption)
-                                .foregroundStyle(ShengbianColors.primaryAction)
                         }
                     }
                 }
-            }
-            .sheet(isPresented: $showEditSheet) {
-                WorkshopEditSheet(workshop: workshop) { updated in
-                    workshop = updated
+                .sheet(isPresented: $showEditSheet) {
+                    WorkshopEditSheet(workshop: workshop) { updated in
+                        workshop = updated
+                    }
                 }
+                .task { await loadWorkshop() }
             }
-            .task { await loadWorkshop() }
         }
+    }
+
+    private var workshopDemoView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "megaphone.fill")
+                .font(.system(size: 48))
+                .foregroundStyle(ShengbianColors.secondaryText.opacity(0.5))
+            Text("创作主页需要在线模式")
+                .font(ShengbianTypography.title3)
+                .foregroundStyle(ShengbianColors.primaryText)
+            Text("请切换到在线账号以管理公开主页、社交账号和品牌授权")
+                .font(ShengbianTypography.body)
+                .foregroundStyle(ShengbianColors.secondaryText)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var loadingView: some View {
@@ -257,7 +282,8 @@ struct WorkshopView: View {
             }
             Button {
                 Task {
-                    try? await WorkshopAPI.removeSocialAccount(account.id, accessToken: session.accessToken ?? "")
+                    guard let token = session.accessToken else { return }
+                    try? await WorkshopAPI.removeSocialAccount(account.id, accessToken: token)
                     await loadWorkshop()
                 }
             } label: {
@@ -383,7 +409,10 @@ struct WorkshopView: View {
     }
 
     private func publish() async {
-        guard let token = session.accessToken else { return }
+        guard let token = session.accessToken else {
+            Haptics.error()
+            return
+        }
         isPublishing = true
         do {
             try await WorkshopAPI.publish(accessToken: token)
@@ -396,7 +425,10 @@ struct WorkshopView: View {
     }
 
     private func withdraw() async {
-        guard let token = session.accessToken else { return }
+        guard let token = session.accessToken else {
+            Haptics.error()
+            return
+        }
         do {
             try await WorkshopAPI.withdraw(accessToken: token)
             Haptics.impact(.light)
@@ -474,8 +506,12 @@ private struct WorkshopEditSheet: View {
     }
 
     private func save() async {
-        guard let token = session.accessToken else { return }
         isLoading = true
+        guard let token = session.accessToken else {
+            isLoading = false
+            Haptics.error()
+            return
+        }
         let focusItems = contentFocus
             .split(separator: "，").map { $0.trimmingCharacters(in: .whitespaces) }
             + contentFocus.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
