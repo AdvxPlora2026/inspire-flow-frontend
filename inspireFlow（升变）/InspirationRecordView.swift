@@ -166,7 +166,11 @@ struct InspirationRecordView: View {
     private var recordingSection: some View {
         VStack(alignment: .leading, spacing: 24) {
             HStack {
-                ShengbianStatusLabel(title: "正在录制", symbol: "waveform", state: .listening)
+                ShengbianStatusLabel(
+                    title: viaimSession != nil ? "viaim 录制中" : "正在录制",
+                    symbol: "waveform",
+                    state: .listening
+                )
                 Spacer()
                 Text(formattedElapsed)
                     .font(ShengbianTypography.metric)
@@ -179,15 +183,26 @@ struct InspirationRecordView: View {
 
             ShengbianGlassCard {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label(session.isDemoMode ? "实时转录（演示模式）" : "录音将在停止后安全转录", systemImage: "text.bubble")
-                        .font(ShengbianTypography.caption)
-                        .foregroundStyle(ShengbianColors.tertiaryText)
+                    if viaimSession != nil {
+                        Label("viaim 实时文本流", systemImage: "headphones")
+                            .font(ShengbianTypography.caption)
+                            .foregroundStyle(ShengbianColors.listening)
+                    } else if session.isDemoMode {
+                        Label("实时转录（演示模式）", systemImage: "text.bubble")
+                            .font(ShengbianTypography.caption)
+                            .foregroundStyle(ShengbianColors.tertiaryText)
+                    } else {
+                        Label("录音将在停止后上传并转录", systemImage: "text.bubble")
+                            .font(ShengbianTypography.caption)
+                            .foregroundStyle(ShengbianColors.tertiaryText)
+                    }
 
-                    Text(transcription.isEmpty ? "正在聆听…" : transcription)
+                    let displayText = viaimSession != nil ? viaimPartial : transcription
+                    Text(displayText.isEmpty ? "正在聆听…" : displayText)
                         .font(ShengbianTypography.body)
-                        .foregroundStyle(transcription.isEmpty ? ShengbianColors.tertiaryText : ShengbianColors.primaryText)
+                        .foregroundStyle(displayText.isEmpty ? ShengbianColors.tertiaryText : ShengbianColors.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
-                        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: transcription)
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: displayText)
                 }
             }
         }
@@ -586,9 +601,19 @@ struct InspirationRecordView: View {
             Divider().background(ShengbianColors.glassBorder)
 
             HStack {
-                Text(session.isDemoMode ? "当前使用演示转录，不会请求麦克风权限" : "录音会上传到你的账户并由后端转录")
-                    .font(ShengbianTypography.caption)
-                    .foregroundStyle(ShengbianColors.tertiaryText)
+                if session.isDemoMode {
+                    Text("当前使用演示转录，不会请求麦克风权限")
+                        .font(ShengbianTypography.caption)
+                        .foregroundStyle(ShengbianColors.tertiaryText)
+                } else if headset.isAvailable {
+                    Text("viaim 耳机实时转写中")
+                        .font(ShengbianTypography.caption)
+                        .foregroundStyle(ShengbianColors.tertiaryText)
+                } else {
+                    Text("录音将通过 Whisper 转写，完成后进入 PAWN 追问")
+                        .font(ShengbianTypography.caption)
+                        .foregroundStyle(ShengbianColors.tertiaryText)
+                }
                 Spacer()
                 Image(systemName: session.isDemoMode ? "waveform.badge.exclamationmark" : "lock.shield.fill")
                     .foregroundStyle(session.isDemoMode ? ShengbianColors.warning : ShengbianColors.success)
@@ -756,12 +781,35 @@ struct InspirationRecordView: View {
         isSTTUnavailable = false
         do {
             let audioData = try Data(contentsOf: recordedAudioURL)
+            let text: String
 
-            // 直连 Replicate Whisper，不依赖后端 STT
-            let text = try await DirectWhisperClient.shared.transcribe(
-                audioData: audioData,
-                mimeType: "audio/mp4"
-            )
+            // Try backend STT first, fall back to DirectWhisper.
+            if let accessToken = session.accessToken {
+                do {
+                    let job = try await TranscriptionAPI.submit(
+                        accessToken: accessToken,
+                        fileData: audioData,
+                        fileName: "recording.m4a",
+                        mimeType: "audio/mp4"
+                    )
+                    // Poll until terminal
+                    let result = try await pollTranscription(jobID: job.id, accessToken: accessToken)
+                    text = result
+                } catch {
+                    // Backend STT failed; fall through to DirectWhisper.
+                    let whisperText = try await DirectWhisperClient.shared.transcribe(
+                        audioData: audioData,
+                        mimeType: "audio/mp4"
+                    )
+                    text = whisperText
+                }
+            } else {
+                text = try await DirectWhisperClient.shared.transcribe(
+                    audioData: audioData,
+                    mimeType: "audio/mp4"
+                )
+            }
+
             transcription = text
             audioRecorder.discard()
             self.recordedAudioURL = nil
@@ -780,6 +828,22 @@ struct InspirationRecordView: View {
             isSTTUnavailable = true
             Haptics.error()
         }
+    }
+
+    /// Poll backend transcription until terminal.
+    private func pollTranscription(jobID: UUID, accessToken: String) async throws -> String {
+        let maxAttempts = 30
+        for _ in 0..<maxAttempts {
+            let job = try await TranscriptionAPI.status(jobID: jobID, accessToken: accessToken)
+            if job.isTerminal {
+                if job.isSuccess, let text = job.text, !text.isEmpty {
+                    return text
+                }
+                throw NSError(domain: "STT", code: -1, userInfo: [NSLocalizedDescriptionKey: job.error?.message ?? "转录失败"])
+            }
+            try await Task.sleep(for: .seconds(2))
+        }
+        throw NSError(domain: "STT", code: -2, userInfo: [NSLocalizedDescriptionKey: "转录超时"])
     }
 
     /// Fall back to simulated transcription when STT keeps failing.

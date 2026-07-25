@@ -423,4 +423,46 @@ enum BrandEngagementAPI {
             method: "POST", body: body, accessToken: accessToken
         )
     }
+
+    static func updateInboxItem(_ itemID: UUID, read: Bool? = nil, accessToken: String) async throws {
+        struct InboxUpdateRequest: Encodable {
+            var read: Bool?
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encodeIfPresent(read, forKey: .read)
+            }
+            enum CodingKeys: String, CodingKey { case read }
+        }
+        let body = try BackendJSON.encoder.encode(InboxUpdateRequest(read: read))
+        let _: EmptyResponse = try await APIClient.shared.send(
+            "users/me/brand-inbox/\(itemID.uuidString)",
+            method: "PATCH", body: body, accessToken: accessToken
+        )
+    }
+
+    // MARK: Interest Response
+
+    /// Creator responds to a brand interest (accept / decline / message).
+    static func respondToInterest(
+        _ interestID: UUID,
+        action: String? = nil,
+        message: String? = nil,
+        accessToken: String
+    ) async throws {
+        struct InterestResponseRequest: Encodable {
+            var action: String?
+            var message: String?
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encodeIfPresent(action, forKey: .action)
+                try container.encodeIfPresent(message, forKey: .message)
+            }
+            enum CodingKeys: String, CodingKey { case action, message }
+        }
+        let body = try BackendJSON.encoder.encode(InterestResponseRequest(action: action, message: message))
+        let _: EmptyResponse = try await APIClient.shared.send(
+            "users/me/brand-interests/\(interestID.uuidString)",
+            method: "PATCH", body: body, accessToken: accessToken
+        )
+    }
 }

@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		B9D3705F3013295A00A39BA2 /* Grape in Frameworks */ = {isa = PBXBuildFile; productRef = B9D36C0130000001000000A1 /* Grape */; };
-		B9F0BDBF3014CCCF001210FC /* VisionHeadsetOpenSDK in Frameworks */ = {isa = PBXBuildFile; productRef = B9F0BDBE3014CCCF001210FC /* VisionHeadsetOpenSDK */; };
+		B9F0C44E3014E2E7001210FC /* VisionHeadsetOpenSDK in Frameworks */ = {isa = PBXBuildFile; productRef = B9F0C44D3014E2E7001210FC /* VisionHeadsetOpenSDK */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -61,7 +61,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B9F0BDBF3014CCCF001210FC /* VisionHeadsetOpenSDK in Frameworks */,
+				B9F0C44E3014E2E7001210FC /* VisionHeadsetOpenSDK in Frameworks */,
 				B9D3705F3013295A00A39BA2 /* Grape in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -106,7 +106,7 @@
 			name = inspireFlow;
 			packageProductDependencies = (
 				B9D36C0130000001000000A1 /* Grape */,
-				B9F0BDBE3014CCCF001210FC /* VisionHeadsetOpenSDK */,
+				B9F0C44D3014E2E7001210FC /* VisionHeadsetOpenSDK */,
 			);
 			productName = inspireFlow;
 			productReference = B9D36BC63011E5B200A39BA2 /* inspireFlow.app */;
@@ -138,7 +138,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				B9D36C0030000001000000A0 /* XCRemoteSwiftPackageReference "Grape" */,
-				B9F0BDBD3014CCCF001210FC /* XCLocalSwiftPackageReference "../Viaim智能耳机_iOS_v1/VisionHeadsetOpenSDK" */,
+				B9F0C44C3014E2E7001210FC /* XCLocalSwiftPackageReference "../Viaim智能耳机_iOS_v1/VisionHeadsetOpenSDK" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B9D36BC73011E5B200A39BA2 /* Products */;
@@ -317,7 +317,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = wenfeng110402.inspireFlow;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -355,7 +355,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = wenfeng110402.inspireFlow;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -392,7 +392,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		B9F0BDBD3014CCCF001210FC /* XCLocalSwiftPackageReference "../Viaim智能耳机_iOS_v1/VisionHeadsetOpenSDK" */ = {
+		B9F0C44C3014E2E7001210FC /* XCLocalSwiftPackageReference "../Viaim智能耳机_iOS_v1/VisionHeadsetOpenSDK" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "../Viaim智能耳机_iOS_v1/VisionHeadsetOpenSDK";
 		};
@@ -415,7 +415,7 @@
 			package = B9D36C0030000001000000A0 /* XCRemoteSwiftPackageReference "Grape" */;
 			productName = Grape;
 		};
-		B9F0BDBE3014CCCF001210FC /* VisionHeadsetOpenSDK */ = {
+		B9F0C44D3014E2E7001210FC /* VisionHeadsetOpenSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = VisionHeadsetOpenSDK;
 		};
