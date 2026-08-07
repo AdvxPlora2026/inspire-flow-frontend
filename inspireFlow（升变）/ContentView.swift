@@ -73,16 +73,16 @@ struct InspirationDemoView: View {
 
     private let productionQuestions = [
         ProductionQuestion(
-            prompt: "这条视频最想讲给谁看？",
-            answer: "第一次尝试无屏创作的 B 站创作者"
+            prompt: "这条视频最想讲给谁看？".localized,
+            answer: "第一次尝试无屏创作的 B 站创作者".localized
         ),
         ProductionQuestion(
-            prompt: "你希望它是什么形式？",
-            answer: "60 秒现场竖屏短视频"
+            prompt: "你希望它是什么形式？".localized,
+            answer: "60 秒现场竖屏短视频".localized
         ),
         ProductionQuestion(
-            prompt: "最重要的开场画面是什么？",
-            answer: "创作者正在拍摄，却突然冒出一个灵感"
+            prompt: "最重要的开场画面是什么？".localized,
+            answer: "创作者正在拍摄，却突然冒出一个灵感".localized
         )
     ]
 
@@ -102,7 +102,7 @@ struct InspirationDemoView: View {
                 .padding(.bottom, 30)
             }
         }
-        .navigationTitle("接住灵感")
+        .navigationTitle("接住灵感".localized)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -123,7 +123,7 @@ struct InspirationDemoView: View {
             VStack(spacing: 24) {
                 HStack {
                     Label(
-                        isListening ? "PAWN 正在聆听" : "PAWN 已准备好",
+                        isListening ? "PAWN 正在聆听".localized : "PAWN 已准备好".localized,
                         systemImage: isListening ? "waveform" : "ear"
                     )
                     .font(ShengbianTypography.caption)
@@ -135,7 +135,7 @@ struct InspirationDemoView: View {
 
                     Spacer()
 
-                    Text(isListening ? "正在记录" : "本地私密")
+                    Text(isListening ? "正在记录".localized : "本地私密".localized)
                         .font(ShengbianTypography.technical)
                         .foregroundStyle(ShengbianColors.tertiaryText)
                 }
@@ -173,9 +173,9 @@ struct InspirationDemoView: View {
                     .frame(maxWidth: 250)
 
                 VStack(spacing: 5) {
-                    Text(isListening ? "轻点结束并继续" : "轻点开始说话")
+                    Text(isListening ? "轻点结束并继续".localized : "轻点开始说话".localized)
                         .font(ShengbianTypography.headline)
-                    Text(isListening ? "随后进入三轮 PAWN 追问" : "也可以双击 Zilo 戒指唤醒")
+                    Text(isListening ? "随后进入三轮 PAWN 追问".localized : "也可以双击 Zilo 戒指唤醒".localized)
                         .font(ShengbianTypography.caption)
                         .foregroundStyle(ShengbianColors.secondaryText)
                 }
@@ -196,8 +196,8 @@ struct InspirationDemoView: View {
         .buttonStyle(PressableButtonStyle())
         .accessibilityValue(
             isListening
-                ? "正在捕捉"
-                : "尚未开始"
+                ? "正在捕捉".localized
+                : "尚未开始".localized
         )
     }
 
@@ -249,21 +249,21 @@ struct InspirationDemoView: View {
                         )
                     }
                     .buttonStyle(PressableButtonStyle())
-                    .accessibilityHint("模拟通过耳机回答当前问题")
+                    .accessibilityHint("模拟通过耳机回答当前问题".localized)
                 }
             }
         case .generated:
             GlassCard {
                 VStack(alignment: .leading, spacing: 14) {
-                    Label("创作方案已生成", systemImage: "checkmark.circle.fill")
+                    Label("创作方案已生成".localized, systemImage: "checkmark.circle.fill")
                         .font(.headline)
 
-                    ResultLine(label: "标题", value: "我用一枚戒指，接住了差点消失的灵感")
-                    ResultLine(label: "3 秒钩子", value: "最好的创作工具，也许根本没有屏幕。")
-                    ResultLine(label: "结构", value: "灵感丢失 → 戒指唤醒 → 耳机追问 → PAWN 成片")
-                    ResultLine(label: "拍摄", value: "现场走拍、戒指特写、耳机反馈、方案结果页")
+                    ResultLine(label: "标题".localized, value: "我用一枚戒指，接住了差点消失的灵感".localized)
+                    ResultLine(label: "3 秒钩子".localized, value: "最好的创作工具，也许根本没有屏幕。".localized)
+                    ResultLine(label: "结构".localized, value: "灵感丢失 → 戒指唤醒 → 耳机追问 → PAWN 成片".localized)
+                    ResultLine(label: "拍摄".localized, value: "现场走拍、戒指特写、耳机反馈、方案结果页".localized)
 
-                    Button("重新演示") {
+                    Button("重新演示".localized) {
                         resetCaptureDemo()
                     }
                     .font(.caption.weight(.semibold))
@@ -306,8 +306,8 @@ struct InspirationDemoView: View {
     private var privacySection: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(
-                title: "隐私级别",
-                detail: "戒指手势可切换"
+                title: "隐私级别".localized,
+                detail: "戒指手势可切换".localized
             )
 
             HStack(spacing: 8) {
@@ -326,25 +326,25 @@ struct InspirationDemoView: View {
     private var recentIdeasSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(
-                title: "最近灵感",
-                detail: "查看全部"
+                title: "最近灵感".localized,
+                detail: "查看全部".localized
             )
 
             IdeaRow(
-                title: "为什么城市夜晚适合记录声音？",
-                detail: "刚刚 · 已追问 3 轮",
+                title: "为什么城市夜晚适合记录声音？".localized,
+                detail: "刚刚 · 已追问 3 轮".localized,
                 symbol: "waveform"
             )
 
             IdeaRow(
-                title: "用一天测试无屏创作工作流",
-                detail: "昨天 · 已生成视频大纲",
+                title: "用一天测试无屏创作工作流".localized,
+                detail: "昨天 · 已生成视频大纲".localized,
                 symbol: "wand.and.stars"
             )
 
             IdeaRow(
-                title: "活动现场的十个临场拍摄技巧",
-                detail: "周一 · 私密",
+                title: "活动现场的十个临场拍摄技巧".localized,
+                detail: "周一 · 私密".localized,
                 symbol: "lock.fill"
             )
         }
@@ -438,7 +438,7 @@ private struct CreationDemoView: View {
                 .padding(.bottom, 30)
             }
         }
-        .navigationTitle("创作")
+        .navigationTitle("创作".localized)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -448,7 +448,7 @@ private struct CreationDemoView: View {
                     Image(systemName: "plus")
                         .foregroundStyle(.white)
                 }
-                .accessibilityLabel("新建创作")
+                .accessibilityLabel("新建创作".localized)
             }
         }
         .navigationDestination(isPresented: $isCreatingProject) {
@@ -458,7 +458,7 @@ private struct CreationDemoView: View {
 
     private var filterPicker: some View {
         Picker(
-            "项目筛选",
+            "项目筛选".localized,
             selection: $selectedFilter
         ) {
             ForEach(ProjectFilter.allCases) { filter in
@@ -473,15 +473,15 @@ private struct CreationDemoView: View {
     private var projectsSection: some View {
         if filteredProjects.isEmpty {
             ContentUnavailableView(
-                "暂无项目",
+                "暂无项目".localized,
                 systemImage: "square.stack.3d.up.slash",
-                description: Text("新建项目后，PAWN 会在这里持续维护创作状态。")
+                description: Text("新建项目后，PAWN 会在这里持续维护创作状态。".localized)
             )
         } else {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader(
-                    title: "项目",
-                    detail: "\(filteredProjects.count) 个"
+                    title: "项目".localized,
+                    detail: String(format: "%d 个".localized, filteredProjects.count)
                 )
 
                 ForEach(filteredProjects) { project in
@@ -501,15 +501,15 @@ struct PawnWorkspaceView: View {
 
     @State private var messages: [DemoMessage] = [
         DemoMessage(
-            text: "我已经整理了《无屏创作的一天》的初版大纲。你希望开头更偏故事感，还是直接展示戒指唤醒？",
+            text: "我已经整理了《无屏创作的一天》的初版大纲。你希望开头更偏故事感，还是直接展示戒指唤醒？".localized,
             isAgent: true
         ),
         DemoMessage(
-            text: "先用一个活动现场突然有灵感的场景开头，然后再展示戒指。",
+            text: "先用一个活动现场突然有灵感的场景开头，然后再展示戒指。".localized,
             isAgent: false
         ),
         DemoMessage(
-            text: "明白。我会把开头改成 15 秒的现场钩子，并保留同一个项目上下文。",
+            text: "明白。我会把开头改成 15 秒的现场钩子，并保留同一个项目上下文。".localized,
             isAgent: true
         )
     ]
@@ -530,7 +530,7 @@ struct PawnWorkspaceView: View {
                     Text("PAWN")
                         .font(.headline)
 
-                    Text("上下文已同步")
+                    Text("上下文已同步".localized)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -564,7 +564,7 @@ struct PawnWorkspaceView: View {
             .tint(.white)
 
             TextField(
-                "回复 PAWN…",
+                "回复 PAWN…".localized,
                 text: $draftReply
             )
             .textFieldStyle(.plain)
@@ -639,7 +639,7 @@ private struct ProfileDemoView: View {
             }
             .scrollContentBackground(.hidden)
         }
-        .navigationTitle("我的")
+        .navigationTitle("我的".localized)
         .navigationBarTitleDisplayMode(.large)
     }
 
@@ -656,7 +656,7 @@ private struct ProfileDemoView: View {
                     Text("PAWN Creator")
                         .font(.headline)
 
-                    Text("12 条灵感 · 3 个创作项目")
+                    Text("12 条灵感 · 3 个创作项目".localized)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -666,12 +666,12 @@ private struct ProfileDemoView: View {
     }
 
     private var deviceSection: some View {
-        Section("设备") {
+        Section("设备".localized) {
             Label {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Zilo Whisper")
 
-                    Text("已连接 · 电量 84%")
+                    Text("已连接 · 电量 84%".localized)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -684,7 +684,7 @@ private struct ProfileDemoView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("viaim 耳机")
 
-                    Text("已连接 · 麦克风可用")
+                    Text("已连接 · 麦克风可用".localized)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -699,7 +699,7 @@ private struct ProfileDemoView: View {
         Section {
             Toggle(isOn: $localEncryptionEnabled) {
                 Label(
-                    "本地加密",
+                    "本地加密".localized,
                     systemImage: "lock.fill"
                 )
             }
@@ -707,21 +707,21 @@ private struct ProfileDemoView: View {
 
             NavigationLink {
                 ContentUnavailableView(
-                    "暂无商业凭证",
+                    "暂无商业凭证".localized,
                     systemImage: "checkmark.seal",
-                    description: Text("作品提交并完成链上结算后，可在这里查看对应版本的公开凭证。")
+                    description: Text("作品提交并完成链上结算后，可在这里查看对应版本的公开凭证。".localized)
                 )
             } label: {
                 Label(
-                    "商业任务凭证",
+                    "商业任务凭证".localized,
                     systemImage: "checkmark.seal.fill"
                 )
             }
         } header: {
-            Text("记忆与授权")
+            Text("记忆与授权".localized)
         } footer: {
             Text(
-                "原始内容只保存在本地；链上只记录商业任务的版本摘要、授权和结算状态。"
+                "原始内容只保存在本地；链上只记录商业任务的版本摘要、授权和结算状态。".localized
             )
         }
     }
@@ -738,16 +738,16 @@ private enum AppTab: Hashable {
     var title: String {
         switch self {
         case .inspiration:
-            return "灵感"
+            return "灵感".localized
 
         case .creation:
-            return "创作"
+            return "创作".localized
 
         case .collaboration:
             return "PAWN"
 
         case .profile:
-            return "我的"
+            return "我的".localized
         }
     }
 
@@ -825,12 +825,12 @@ private struct SectionHeader: View {
 
     var body: some View {
         HStack {
-            Text(title)
+            Text(title.localized)
                 .font(.headline)
 
             Spacer()
 
-            Text(detail)
+            Text(detail.localized)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -863,11 +863,11 @@ private struct IdeaRow: View {
                     )
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(title)
+                    Text(title.localized)
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
 
-                    Text(detail)
+                    Text(detail.localized)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -900,7 +900,7 @@ private struct ResultChip: View {
                     : Color.secondary
             )
 
-            Text(title)
+            Text(title.localized)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
         }
@@ -909,7 +909,7 @@ private struct ResultChip: View {
         .background(
             ShengbianColors.glassTint,
             in: RoundedRectangle(
-        cornerRadius: ShengbianMetrics.controlRadius,
+                cornerRadius: ShengbianMetrics.controlRadius,
                 style: .continuous
             )
         )
@@ -922,11 +922,11 @@ private struct ResultLine: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label)
+            Text(label.localized)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            Text(value)
+            Text(value.localized)
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -946,10 +946,10 @@ private struct ProjectRow: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(project.name)
+                        Text(project.name.localized)
                             .font(.subheadline.weight(.semibold))
 
-                        Text(project.stage.title)
+                        Text(project.stage.title.localized)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -978,7 +978,7 @@ private struct ProjectRow: View {
 
                 HStack {
                     Label(
-                        project.kind.title,
+                        project.kind.title.localized,
                         systemImage: project.kind == .commercial
                             ? "briefcase.fill"
                             : "person.fill"
@@ -989,7 +989,7 @@ private struct ProjectRow: View {
                     Spacer()
 
                     if project.stage != .settled {
-                        Button(project.stage.actionTitle, action: advance)
+                        Button(project.stage.actionTitle.localized, action: advance)
                             .font(.caption.weight(.semibold))
                             .buttonStyle(.bordered)
                             .tint(.white)
@@ -1013,17 +1013,17 @@ private struct TaskContextCard: View {
                     )
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("无屏创作的一天")
+                    Text("无屏创作的一天".localized)
                         .font(.subheadline.weight(.semibold))
 
-                    Text("上下文已同步 · 4 轮对话")
+                    Text("上下文已同步 · 4 轮对话".localized)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
-                Text("进行中")
+                Text("进行中".localized)
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(ShengbianColors.primaryText)
                     .padding(.horizontal, 9)
@@ -1138,13 +1138,13 @@ private enum PrivacyLevel: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .privateOnly:
-            return "私密"
+            return "私密".localized
 
         case .projectMembers:
-            return "项目成员"
+            return "项目成员".localized
 
         case .publicContent:
-            return "公开"
+            return "公开".localized
         }
     }
 
@@ -1174,13 +1174,13 @@ private enum ProjectFilter: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .all:
-            return "全部"
+            return "全部".localized
 
         case .creating:
-            return "创作中"
+            return "创作中".localized
 
         case .completed:
-            return "已完成"
+            return "已完成".localized
         }
     }
 

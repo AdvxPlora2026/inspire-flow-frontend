@@ -7,11 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B9AB7A363021D00700C9B23C /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = B9AB7A353021D00700C9B23C /* Info.plist */; };
+		B9AB7A383021D2E200C9B23C /* String+Localizable.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9AB7A373021D2E200C9B23C /* String+Localizable.swift */; };
 		B9D3705F3013295A00A39BA2 /* Grape in Frameworks */ = {isa = PBXBuildFile; productRef = B9D36C0130000001000000A1 /* Grape */; };
 		B9F0C44E3014E2E7001210FC /* VisionHeadsetOpenSDK in Frameworks */ = {isa = PBXBuildFile; productRef = B9F0C44D3014E2E7001210FC /* VisionHeadsetOpenSDK */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		B9AB7A353021D00700C9B23C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		B9AB7A373021D2E200C9B23C /* String+Localizable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Localizable.swift"; sourceTree = "<group>"; };
 		B9D36BC63011E5B200A39BA2 /* inspireFlow.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = inspireFlow.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -73,6 +77,8 @@
 			isa = PBXGroup;
 			children = (
 				B9D36BC83011E5B200A39BA2 /* inspireFlow（升变） */,
+				B9AB7A353021D00700C9B23C /* Info.plist */,
+				B9AB7A373021D2E200C9B23C /* String+Localizable.swift */,
 				B9D36BC73011E5B200A39BA2 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -128,10 +134,11 @@
 				};
 			};
 			buildConfigurationList = B9D36BC13011E5B200A39BA2 /* Build configuration list for PBXProject "inspireFlow" */;
-			developmentRegion = en;
+			developmentRegion = "zh-Hans";
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				"zh-Hans",
 				Base,
 			);
 			mainGroup = B9D36BBD3011E5B200A39BA2;
@@ -155,6 +162,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B9AB7A363021D00700C9B23C /* Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -165,6 +173,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B9AB7A383021D2E200C9B23C /* String+Localizable.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -305,8 +314,9 @@
 				INFOPLIST_FILE = "InspireFlow-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = inspireFlow;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "用于连接 Zilo Whisper 戒指并读取录音与手势数据";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "用于录制灵感语音并提交到 inspireFlow 进行转录";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "用于连接 Zilo 戒指和 viaim 智能耳机，实现免触屏灵感捕捉。";
+				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "用于连接 Zilo 戒指和 viaim 智能耳机。";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "用于录制灵感语音，PAWN 会将其转写为文字并追问细节。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -317,7 +327,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.7;
+				MARKETING_VERSION = 1.8;
 				PRODUCT_BUNDLE_IDENTIFIER = wenfeng110402.inspireFlow;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -343,8 +353,9 @@
 				INFOPLIST_FILE = "InspireFlow-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = inspireFlow;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "用于连接 Zilo Whisper 戒指并读取录音与手势数据";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "用于录制灵感语音并提交到 inspireFlow 进行转录";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "用于连接 Zilo 戒指和 viaim 智能耳机，实现免触屏灵感捕捉。";
+				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "用于连接 Zilo 戒指和 viaim 智能耳机。";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "用于录制灵感语音，PAWN 会将其转写为文字并追问细节。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -355,7 +366,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.7;
+				MARKETING_VERSION = 1.8;
 				PRODUCT_BUNDLE_IDENTIFIER = wenfeng110402.inspireFlow;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
